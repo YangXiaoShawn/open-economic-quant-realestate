@@ -29,7 +29,7 @@ documentation.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Final, Literal
+from typing import Any, Final, Literal
 
 SCHEMA_VERSION: Final[str] = "freddie-llds-2026-08-10"
 VERIFIED_AGAINST: Final[dict[str, str]] = {
@@ -567,6 +567,69 @@ def classify_zero_balance(code: str | None) -> tuple[str, bool]:
     if zb is None:
         return ("unknown_zb_code", True)
     return (zb.event_class, zb.censoring)
+
+
+def layout_spec() -> dict[str, Any]:
+    """The full layout as a plain dict, for serialising to YAML.
+
+    This is the single source of truth: ``data/reference/freddie_llds_layout.yaml``
+    is generated from it by ``lockin emit-layout``, and a test fails if the two
+    ever disagree. Committing the YAML makes the field map reviewable without
+    reading Python; generating it means the two cannot drift.
+    """
+
+    def fields(fs: tuple[Field, ...]) -> list[dict[str, Any]]:
+        return [
+            {
+                "position": f.position,
+                "name": f.name,
+                "official_name": f.official,
+                "dtype": f.dtype,
+                "na_values": list(f.na_values),
+                "note": f.note,
+            }
+            for f in fs
+        ]
+
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "verified_against": dict(VERIFIED_AGAINST),
+        "provenance_note": (
+            "GENERATED from src/lockin/schemas/freddie.py by `lockin emit-layout`. Do "
+            "not hand-edit: tests/test_ingest.py::test_layout_yaml_matches_schema fails "
+            "if this file and the module disagree. The field definitions themselves "
+            "were transcribed from Freddie Mac's PUBLIC file_layout.xlsx and "
+            "user_guide.pdf, which are served without registration. The DATA are not "
+            "redistributed here."
+        ),
+        "file_format": {
+            "delimiter": "|",
+            "header": False,
+            "encoding": "latin-1",
+            "origination_field_count": len(ORIGINATION_FIELDS),
+            "performance_field_count": len(PERFORMANCE_FIELDS),
+        },
+        "origination_fields": fields(ORIGINATION_FIELDS),
+        "performance_fields": fields(PERFORMANCE_FIELDS),
+        "zero_balance_codes": [
+            {
+                "code": z.code,
+                "official_label": z.official_label,
+                "priority": z.priority,
+                "event_class": z.event_class,
+                "treated_as_censoring": z.censoring,
+                "rationale": z.rationale,
+            }
+            for z in sorted(ZERO_BALANCE_CODES.values(), key=lambda x: x.priority)
+        ],
+        "enumerations": {
+            "loan_purpose": dict(LOAN_PURPOSE),
+            "occupancy_status": dict(OCCUPANCY_STATUS),
+            "property_type": dict(PROPERTY_TYPE),
+            "amortization_type": dict(AMORTIZATION_TYPE),
+            "channel": dict(CHANNEL),
+        },
+    }
 
 
 def assert_layout_verified() -> None:

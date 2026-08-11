@@ -240,6 +240,25 @@ def run_hazard_ladder(cfg: Config) -> dict[str, Path]:
         ],
     )
 
+    # -- loan-level sensitivity cells ---------------------------------------
+    from lockin.survival.sensitivity import run_sensitivities
+
+    emit(
+        "sensitivity_cells",
+        "hazard_association",
+        OUTCOME_PREPAY,
+        "loan-month",
+        run_sensitivities(cfg),
+        [
+            "These re-estimate the headline hazard under alternatives the baseline "
+            "deliberately does not use. They exist because three places in the code "
+            "documented a sensitivity check as if it had been run.",
+            "Censoring ZB 15/16/96 is an ASSUMPTION (that the removal is uninformative "
+            "about the borrower's latent exit time), not a fact. The first cell bounds "
+            "the error if it is wrong.",
+        ],
+    )
+
     # -- dataset description (for the methodology report) -------------------
     emit(
         "survival_dataset",

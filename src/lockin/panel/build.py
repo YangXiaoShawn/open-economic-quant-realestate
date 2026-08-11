@@ -25,7 +25,7 @@ from pathlib import Path
 
 import polars as pl
 
-from lockin.adapters import census_bps, fhfa_hpi, hmda
+from lockin.adapters import bls_laus, census_bps, fhfa_hpi, hmda
 from lockin.config import Config
 from lockin.manifest import write_manifest
 from lockin.stock import load_active_stock, predetermined_exposure
@@ -156,12 +156,32 @@ def build_local_panel(cfg: Config) -> tuple[pl.DataFrame, Path, list[str]]:
         bps = None
         notes.append(f"Census BPS UNAVAILABLE: {exc}")
 
+    # --- unemployment (OPTIONAL) ---------------------------------------------
+    # Addresses the local-labour-shock threat in IDENTIFICATION_STRATEGY 3.4. The
+    # panel is built with or without it; absence is recorded, never silently ignored.
+    laus = bls_laus.try_load(cfg)
+    if laus is not None:
+        laus = laus.select("geography", "period", "unemployment_rate")
+        notes.append(
+            f"BLS LAUS unemployment: {laus.height:,} state-months "
+            f"({laus['period'].min()}..{laus['period'].max()}). Model-based estimates "
+            "subject to annual revision; the rate conflates employment changes with "
+            "labour-force participation changes."
+        )
+    else:
+        notes.append(
+            "BLS LAUS unemployment UNAVAILABLE -- the local-labour-shock threat in "
+            "docs/IDENTIFICATION_STRATEGY.md 3.4 remains UNCONTROLLED in this run."
+        )
+
     # --- monthly panel -------------------------------------------------------
     monthly = stock
     if hpi is not None:
         monthly = monthly.join(hpi, on=["geography", "period"], how="left")
     if bps is not None:
         monthly = monthly.join(bps, on=["geography", "period"], how="left")
+    if laus is not None:
+        monthly = monthly.join(laus, on=["geography", "period"], how="left")
 
     monthly = monthly.with_columns(
         pl.col("period").dt.year().alias("year"),
@@ -226,6 +246,19 @@ def build_local_panel(cfg: Config) -> tuple[pl.DataFrame, Path, list[str]]:
         .sort(["geography", "year"])
         .with_columns(pl.col("year").cast(pl.Int32))
     )
+    if laus is not None:
+        laus_annual = (
+            laus.with_columns(pl.col("period").dt.year().cast(pl.Int32).alias("year"))
+            .group_by(["geography", "year"])
+            .agg(
+                pl.col("unemployment_rate").mean().alias("unemployment_rate"),
+                pl.len().alias("n_unemployment_months"),
+            )
+            .filter(pl.col("n_unemployment_months") == 12)
+            .drop("n_unemployment_months")
+        )
+    else:
+        laus_annual = None
 
     annual = skeleton.join(stock_annual, on=["geography", "year"], how="left").with_columns(
         pl.col("mean_active_loans").is_not_null().alias("has_stock_data")
@@ -259,6 +292,8 @@ def build_local_panel(cfg: Config) -> tuple[pl.DataFrame, Path, list[str]]:
             .filter(pl.col("n_permit_months_in_year") == 12)
         )
         annual = annual.join(bps_annual, on=["geography", "year"], how="left")
+    if laus_annual is not None:
+        annual = annual.join(laus_annual, on=["geography", "year"], how="left")
     if h is not None:
         annual = annual.join(
             h.with_columns(pl.col("year").cast(pl.Int32)), on=["geography", "year"], how="left"

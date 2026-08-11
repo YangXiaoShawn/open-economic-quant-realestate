@@ -286,3 +286,84 @@ and would hide genuine errors in the noise. Two *genuine* typing defects were fo
 fixed rather than suppressed: a dict typed `dict[str, dict]` that also held a string,
 and `write_loan_events` returning `tuple[object, ...]` which erased structure at every
 call site.
+
+### 2026-08-11 · D024 · Closed three documentation-vs-implementation gaps **[AUTO]**
+An audit against the original specification found three places where a document
+promised something the code did not do. All are now real:
+
+1. **`data/reference/freddie_llds_layout.yaml` did not exist**, despite being cited by
+   D003 and by `LICENSE_AND_REDISTRIBUTION.md` §1. It is now **generated from**
+   `lockin.schemas.freddie` by `make emit-layout`, and
+   `tests/test_ingest.py::TestLayoutYaml` fails if the two ever disagree. Committing it
+   makes the field map reviewable without reading Python; generating it means the two
+   cannot drift.
+2. **`make reproduce-sample` omitted `robustness`**, so a fresh clone produced an empty
+   robustness section in `reports/failed_hypotheses.md`. Added.
+3. **Three comments claimed "tested by a robustness cell" for checks that did not
+   exist** (`events.py` on ZB 15/16/96, `lockin_measures.py` on the fresh-term payment
+   gap, `rates.py` on month-end alignment). `lockin.survival.sensitivity` now runs all
+   three and each comment points at the resulting artifact.
+
+The sensitivity results are substantive rather than reassuring:
+
+| cell | coefficient | vs baseline (−0.5248) |
+|---|---|---|
+| admin removals counted as prepayment | −0.4353 | `large_shift` |
+| fresh-term payment gap | −1.4727 vs −3.2629 remaining-term | `large_shift` |
+| month-end rate alignment | −0.4896 | `moderate_shift` |
+
+So the censoring choice, the payment-gap term convention, and the within-month rate
+timing each move the coefficient by more than one standard error. These are
+**fragilities that must be stated whenever a magnitude is quoted**, and
+`reports/failed_hypotheses.md` §3 now does so.
+
+*Lesson recorded:* a comment claiming a robustness check is a promise. Prefer citing an
+artifact path over describing a check in prose.
+
+### 2026-08-11 · D025 · BLS LAUS unemployment adapter, via the API not the bulk files **[AUTO]**
+Section F of the specification asked for optional local economic control adapters; none
+existed, which left the local-labour-shock threat (`IDENTIFICATION_STRATEGY` §3.4)
+merely documented rather than addressed.
+
+`lockin.adapters.bls_laus` now supplies the seasonally adjusted state unemployment rate
+(series `LASST{fips}0000000000003`), 3,672 state-months over 2018-01…2023-12.
+
+**Route chosen and why.** The BLS bulk flat files at `download.bls.gov` return HTTP 403
+to a generic client; BLS asks automated downloaders to identify themselves with a
+contact email. **We do not put the user's personal email address into an outbound
+header without being asked**, so that route is not used. The public JSON API v2 serves
+the same series without a registration key within published unregistered limits (~25
+queries/day, 25 series and 20 years per query); three queries cover all 51 states.
+
+Wiring: the panel joins it when present and **records its absence when not**; the event
+study adds `unemployment_rate` to the control set only if the column exists; nothing
+raises. Every event-study artifact now carries an `identification_threats` map stating,
+per threat, whether this run controlled for it — so a reader can see which threats were
+addressed and which were merely noted, without opening the strategy document.
+
+Effect on the headline: none. The purchase-originations DiD moves from +0.0010 to
++0.0007 (t = 0.03). The null is not an artifact of omitting labour-market conditions.
+
+### 2026-08-11 · D026 · Robustness grid extended from 34 to 42 cells **[AUTO]**
+Section K listed ~18 robustness axes; the grid covered 11. Added four axes in which the
+treatment is **genuinely rebuilt** rather than relabelled:
+
+- **Alternative pre-shock dates** (2021-06, 2022-03): exposure re-frozen from scratch.
+- **Alternative market-rate series** (`pmms15`): exposure re-evaluated at the 15-year
+  post-shock national level, which changes the gap implied by the same coupon
+  distribution.
+- **Alternative HPI concepts** (all-transactions, expanded-data): the 2019–21
+  pandemic-boom control is rebuilt from each concept separately. Concepts are still
+  never mixed *within* a series.
+- **Loan sub-samples** (purchase originations only, primary residence only, excluding
+  manufactured housing): the frozen coupon shares are recomputed on the restricted loan
+  population.
+
+All eight new cells are **insignificant**, consistent with the baseline null. The null
+is therefore robust to the pre-shock date, the rate series, the price-index concept, and
+the loan population — which is worth more than the same finding from a single
+specification.
+
+Still not covered, and recorded as such: alternative **geography** (MSA needs a
+versioned OMB crosswalk) and **stable-servicer samples** (servicer names below 1% of
+quarterly UPB are collapsed to "Other", so the sample is not constructible as intended).

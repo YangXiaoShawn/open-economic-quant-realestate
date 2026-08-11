@@ -1,6 +1,6 @@
 # STATUS
 
-**Last updated:** 2026-08-11 · commit `cf5d415` · config `sample` (digest `9fb71e2454f98608`)
+**Last updated:** 2026-08-11 (second pass) · config `sample`
 
 > ⚠️ **The loan-level results in this run are SYNTHETIC.** The Freddie Mac
 > Single-Family Loan-Level Dataset requires registration, which this repository does
@@ -21,15 +21,15 @@ panel → exposure event study → automatically generated research memo.
 | check | state |
 |---|---|
 | Pipeline stages | **19 / 19 OK** (`uv run lockin status`) |
-| Result artifacts | **36**, all with evidence tier + population + provenance |
-| Tests | **108 passed** (107 offline + 1 network), 0 failed |
+| Result artifacts | **37**, all with evidence tier + population + provenance |
+| Tests | **110 passed** (109 offline + 1 network), 0 failed |
 | `ruff check` | clean |
 | `ruff format --check` | clean |
-| `mypy` | clean (40 source files; core interfaces strict) |
+| `mypy` | clean (42 source files; core interfaces strict) |
 | `make validate-data` | **0 hard**, 0 soft, 11 informational |
 | Generated reports | 10 |
 
-Artifacts by tier: `descriptive` 12 · `hazard_association` 7 · `quasi_experimental` 6 ·
+Artifacts by tier: `descriptive` 12 · `hazard_association` 8 · `quasi_experimental` 6 ·
 `simulation` 11.
 
 Milestones M0–M12 are complete. **M13 (full registered-data run) is BLOCKED** on user
@@ -46,6 +46,7 @@ registration — see §7.
 | FHFA HPI | **yes** | `hpi_master.csv`, 184,827 rows, 1975…2026; purchase-only, **quarterly**, State |
 | HMDA (CFPB Data Browser) | **yes** | 1,530 state-year-cell aggregations, 2018…2023, 51 states × 5 measures |
 | Census BPS | **yes** | 4,680 state-months, 2018-01…2023-12, `c` (preliminary) vintage |
+| BLS LAUS (optional) | **yes** | 3,672 state-months, 2018-01…2023-12, seasonally adjusted unemployment rate via the public API |
 | FRED `MORTGAGE30US` | **no — failed** | optional cross-check; read timeout. Non-fatal, recorded |
 
 Loan-level schema **verified** against the public `file_layout.xlsx` and
@@ -96,8 +97,24 @@ suggestive evidence for it either.
 **A placebo outcome fails.** The denial rate moves at t = −1.90. That counts *against*
 the design and is flagged `placebo_FAIL` in the robustness grid.
 
-Robustness grid: 34 cells — 24 insignificant, 4 consistent, 2 not estimable, 2 placebo
-passes, 2 placebo failures.
+Robustness grid: **42 cells**. The eight added in the second pass — alternative
+pre-shock dates (2021-06, 2022-03), alternative rate series (`pmms15`), alternative HPI
+concepts (all-transactions, expanded-data), and three loan sub-samples — are all
+insignificant. **The null is robust** to the pre-shock date, the rate series, the price
+index concept, and the loan population.
+
+Adding the unemployment control moved the headline from +0.0010 to +0.0007. The null is
+not an artifact of omitting labour-market conditions.
+
+**Loan-level sensitivity (new).** Three modelling choices each move the hazard
+coefficient by more than one standard error, so they must be stated whenever a magnitude
+is quoted:
+
+| cell | coefficient | vs baseline (−0.5248) |
+|---|---|---|
+| ZB 15/16/96 counted as prepayment | −0.4353 | `large_shift` |
+| fresh-term payment gap | −1.4727 (vs −3.2629) | `large_shift` |
+| month-end rate alignment | −0.4896 | `moderate_shift` |
 
 ---
 
@@ -128,6 +145,11 @@ Plus: FHFA does not publish monthly purchase-only HPI at state level (D009), so 
 original config matched zero rows; `load_series` now raises with the published
 combinations.
 
+**Second pass (D024–D026)** closed three documentation-vs-implementation gaps: the
+committed layout YAML did not exist, `make reproduce-sample` omitted `robustness`, and
+three comments claimed sensitivity checks that had never been run. All three are now
+real, and the sensitivity results turned out to be fragilities worth reporting.
+
 ---
 
 ## 6. What is NOT established
@@ -143,9 +165,18 @@ combinations.
 6. **Any forecast.** The scenario module is explicitly not one.
 7. **Exposure exogeneity.** Predetermined ≠ exogenous. No IV language is used.
 
-Unresolved identification threats in this slice: remote-work exposure and local labour
-shocks (the optional adapters are not in the critical path), and local rate dispersion
-(PMMS is national).
+Identification-threat status is now recorded **on every event-study artifact** under
+`identification_threats`:
+
+| threat | status |
+|---|---|
+| pandemic demand reallocation | CONTROLLED (2019–21 price growth) |
+| local labour shocks | **CONTROLLED** (BLS LAUS unemployment rate) |
+| differential refinancing booms | PARTIAL (outcome labeled contaminated; control available) |
+| national monetary-policy endogeneity | ABSORBED by period fixed effects |
+| remote-work exposure | **UNCONTROLLED** — no teleworkable-share adapter |
+| geography-specific rate dispersion | **UNCONTROLLED** — PMMS is national |
+| spillovers | UNCORRECTED — biases toward zero |
 
 ---
 
@@ -172,8 +203,10 @@ full extraction, and the `SYNTHETIC` stamps and report banners disappear on thei
    fix for statistical power (26 clusters → several hundred).
 3. **Local market-rate series** from HMDA-reported interest rates (2018+), to reduce the
    measurement error the national PMMS introduces into the loan-level gap.
-4. **Unemployment and teleworkable-share controls**, to address the two identification
-   threats currently recorded as unresolved.
+4. **Teleworkable-share control**, the remaining unresolved threat (unemployment is
+   now controlled via BLS LAUS). Also a **stable-servicer** robustness sample, which is
+   currently not constructible because servicer names below 1% of quarterly UPB are
+   collapsed to "Other".
 5. **Stock-flow housing model** with search frictions — deliberately deferred until the
    vertical slice was stable, which it now is.
 6. **County level**, after (2).

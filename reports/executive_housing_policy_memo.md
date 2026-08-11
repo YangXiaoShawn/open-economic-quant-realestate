@@ -6,8 +6,8 @@
 
 | | |
 |---|---|
-| Generated | `2026-08-11T05:59:16+00:00` |
-| Git commit | `36593adf3972` |
+| Generated | `2026-08-11T17:45:24+00:00` |
+| Git commit | `d85ce3220ad4-dirty` |
 | Config | `sample` (digest `9fb71e2454f98608`) |
 | Data class | **SYNTHETIC** |
 | Data period | `2021-01..2024-12` |
@@ -70,15 +70,15 @@ Conditional on loan age, credit score, DTI, LTV, balance, and local price growth
 
 ### 4. Does local lock-in exposure predict lower purchase-market activity?
 
-Log HMDA purchase originations: **-0.0011 per s.d. of exposure · tier `quasi_experimental` · pre-trend passes**.
+Log HMDA purchase originations: **-0.0029 per s.d. of exposure · tier `quasi_experimental` · pre-trend passes**.
 
-The collapsed pre/post estimate is 0.0010 (s.e. 0.0191, t = 0.05, 26 clusters) — **not statistically distinguishable from zero.**
+The collapsed pre/post estimate is 0.0007 (s.e. 0.0197, t = 0.03, 26 clusters) — **not statistically distinguishable from zero.**
 
 The sign is negative, consistent with the mechanism, but with 26 state clusters and a within-sample exposure spread of only a fraction of a standard deviation in economic terms, this design has limited power. **A negative point estimate that does not clear conventional significance is not evidence of an effect, and it is not evidence against one either.**
 
 ### 5. What happens to local prices?
 
-House price growth: **0.0150 per s.d. of exposure · tier `descriptive` · pre-trend fails/untestable**.
+House price growth: **0.0147 per s.d. of exposure · tier `descriptive` · pre-trend fails/untestable**.
 
 **We do not assume a sign, and the theory does not give us one.** A locked-in owner withdraws from *both* sides of the market: they do not list, and they do not buy a replacement. The first raises prices, the second lowers them. The net effect depends on which side is more inelastic and on how much demand comes from first-time buyers and investors, who are not locked in at all.
 
@@ -86,7 +86,7 @@ This is why the decomposition report exists and why any confident public claim t
 
 ### 6. What happens to construction?
 
-Log single-family permits authorized: **-0.0049 per s.d. of exposure · tier `descriptive` · pre-trend fails/untestable**.
+Log single-family permits authorized: **-0.0101 per s.d. of exposure · tier `descriptive` · pre-trend fails/untestable**.
 
 Two channels point in opposite directions. If lock-in makes existing homes scarce and expensive, builders substitute toward new construction. If it suppresses trade-up demand, permits fall. Census BPS measures permits **authorized**, not starts and not completions, so even a clean estimate would be an intention rather than an outcome.
 
@@ -136,7 +136,7 @@ Three points a policy reader should take from the scenario set:
 4. **The population is doubly selected**: conforming conventional Freddie Mac acquisitions, within a mortgage market that itself excludes cash buyers and the roughly one third of owner-occupied homes with no mortgage.
 5. **The demand/supply decomposition is framed, not achieved.** No listings data, no transaction records, no household panel.
 6. **Low power at the state level.** 26 clusters and a narrow exposure spread.
-7. **Robustness:** 4 of 34 specification cells were flagged as sign flips, inestimable, or failing placebos. See `reports/failed_hypotheses.md`.
+7. **Robustness:** 4 of 42 specification cells were flagged as sign flips, inestimable, or failing placebos. See `reports/failed_hypotheses.md`.
 
 ---
 
@@ -169,15 +169,16 @@ Three points a policy reader should take from the scenario set:
 
 | dataset | schema@retrieved#checksum |
 |---|---|
-| `active_mortgage_stock` | `active-stock-v1@2026-08-11T05:49:58+00:00#336fc723d417` |
+| `active_mortgage_stock` | `active-stock-v1@2026-08-11T17:43:39+00:00#336fc723d417` |
+| `bls_laus` | `bls-api-v2-laus-state-v1@2026-08-11T17:41:19+00:00#8cd9335cc5ae` |
 | `census_bps` | `census-bps-state-monthly-v1@2026-08-11T00:56:23+00:00#a88b1ad2c127` |
 | `fhfa_hpi` | `fhfa-hpi-master-v1@2026-08-11T00:54:48+00:00#8ab042e042ff` |
 | `freddie_llds_synthetic_fixtures` | `freddie-llds-2026-08-10@2026-08-11T05:49:57+00:00#6b358e5f7d60` |
 | `hmda` | `cfpb-data-browser-aggregations-v2@2026-08-11T01:07:30+00:00#6946b46cf136` |
 | `loan_episodes` | `loan-episodes-v1@2026-08-11T05:49:58+00:00#7487945b2064` |
 | `loan_events` | `loan-events-v1@2026-08-11T05:49:57+00:00#4a00c7112e61` |
-| `local_market_panel_annual` | `local-panel-v1@2026-08-11T05:49:58+00:00#f21a4a866b67` |
-| `local_market_panel_monthly` | `local-panel-v1@2026-08-11T05:49:58+00:00#31ea625aeb82` |
+| `local_market_panel_annual` | `local-panel-v1@2026-08-11T17:43:39+00:00#f0a464fb2370` |
+| `local_market_panel_monthly` | `local-panel-v1@2026-08-11T17:43:39+00:00#4d56f18bd056` |
 | `pmms` | `pmms-history-v1@2026-08-11T00:54:48+00:00#c74cccece4a6` |
 
 ---

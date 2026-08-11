@@ -6,8 +6,8 @@
 
 | | |
 |---|---|
-| Generated | `2026-08-11T05:59:16+00:00` |
-| Git commit | `36593adf3972` |
+| Generated | `2026-08-11T17:45:24+00:00` |
+| Git commit | `d85ce3220ad4-dirty` |
 | Config | `sample` (digest `9fb71e2454f98608`) |
 | Data class | **SYNTHETIC** |
 | Data period | `2021-01..2024-12` |
@@ -73,11 +73,11 @@ No sign is presumed. Each cell reports what the artifacts actually show, with th
 
 | outcome | mean post effect (per 1 s.d. exposure) | tier | pre-trend | reading |
 |---|---|---|---|---|
-| purchase originations (log) | -0.0011 | `quasi_experimental` | pass | reduced |
-| refinance originations (log) | -0.0581 | `quasi_experimental` | pass | reduced |
-| house price growth | 0.0150 | `descriptive` | fail | descriptive only — pre-trend fails or is untestable |
-| single-family permits (log) | -0.0049 | `descriptive` | fail | descriptive only — pre-trend fails or is untestable |
-| multifamily 5+ permits (log) | -0.0414 | `quasi_experimental` | pass | reduced |
+| purchase originations (log) | -0.0029 | `quasi_experimental` | pass | reduced |
+| refinance originations (log) | -0.0627 | `quasi_experimental` | pass | reduced |
+| house price growth | 0.0147 | `descriptive` | fail | descriptive only — pre-trend fails or is untestable |
+| single-family permits (log) | -0.0101 | `descriptive` | fail | descriptive only — pre-trend fails or is untestable |
+| multifamily 5+ permits (log) | -0.0413 | `quasi_experimental` | pass | reduced |
 
 ## 4. The loan-level gradient that motivates the market-level design
 
@@ -107,15 +107,16 @@ The supply-elasticity scenario in the policy module exists to make this concrete
 
 | dataset | schema@retrieved#checksum |
 |---|---|
-| `active_mortgage_stock` | `active-stock-v1@2026-08-11T05:49:58+00:00#336fc723d417` |
+| `active_mortgage_stock` | `active-stock-v1@2026-08-11T17:43:39+00:00#336fc723d417` |
+| `bls_laus` | `bls-api-v2-laus-state-v1@2026-08-11T17:41:19+00:00#8cd9335cc5ae` |
 | `census_bps` | `census-bps-state-monthly-v1@2026-08-11T00:56:23+00:00#a88b1ad2c127` |
 | `fhfa_hpi` | `fhfa-hpi-master-v1@2026-08-11T00:54:48+00:00#8ab042e042ff` |
 | `freddie_llds_synthetic_fixtures` | `freddie-llds-2026-08-10@2026-08-11T05:49:57+00:00#6b358e5f7d60` |
 | `hmda` | `cfpb-data-browser-aggregations-v2@2026-08-11T01:07:30+00:00#6946b46cf136` |
 | `loan_episodes` | `loan-episodes-v1@2026-08-11T05:49:58+00:00#7487945b2064` |
 | `loan_events` | `loan-events-v1@2026-08-11T05:49:57+00:00#4a00c7112e61` |
-| `local_market_panel_annual` | `local-panel-v1@2026-08-11T05:49:58+00:00#f21a4a866b67` |
-| `local_market_panel_monthly` | `local-panel-v1@2026-08-11T05:49:58+00:00#31ea625aeb82` |
+| `local_market_panel_annual` | `local-panel-v1@2026-08-11T17:43:39+00:00#f0a464fb2370` |
+| `local_market_panel_monthly` | `local-panel-v1@2026-08-11T17:43:39+00:00#4d56f18bd056` |
 | `pmms` | `pmms-history-v1@2026-08-11T00:54:48+00:00#c74cccece4a6` |
 
 ---

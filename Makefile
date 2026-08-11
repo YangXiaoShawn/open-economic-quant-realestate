@@ -46,6 +46,9 @@ build-local-panel: ## Build geography-month active stock + local housing-market 
 validate-data: ## Run schema, coverage, and internal-consistency validation checks
 	$(RUN) lockin validate-data --config $(CONFIG)
 
+emit-layout: ## Regenerate data/reference/freddie_llds_layout.yaml from the schema module
+	$(RUN) lockin emit-layout
+
 estimate-hazards: ## KM/CIF description + discrete-time logit/cloglog + competing risks
 	$(RUN) lockin estimate-hazards --config $(CONFIG)
 
@@ -76,7 +79,7 @@ typecheck: ## mypy over core interfaces
 
 reproduce-sample: prepare-sample-data ingest-mortgages build-loan-events build-lockin \
                   build-local-panel validate-data estimate-hazards estimate-local-effects \
-                  benchmark simulate-policy report ## Full end-to-end sample run
+                  robustness benchmark simulate-policy report ## Full end-to-end sample run
 	@echo "Sample reproduction complete. See outputs/ and reports/."
 
 dashboard: ## Launch the Streamlit dashboard

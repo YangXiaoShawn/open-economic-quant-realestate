@@ -419,7 +419,12 @@ def run_event_studies(cfg: Config) -> dict[str, Path]:
     shock_year = int(cfg.event_study.shock_date.split("-")[0])
     ref_year = shock_year - 1
     exposure = f"pre_{cfg.event_study.exposure_measure}"
-    controls = [c for c in ("pre_hpi_growth_2019_2021",) if c in annual.columns]
+    # `unemployment_rate` is time-varying and enters as a contemporaneous control;
+    # `pre_hpi_growth_2019_2021` is a fixed pre-period characteristic. Including the
+    # unemployment control is what addresses the local-labour-shock threat; when the
+    # optional LAUS source is absent the column is simply missing and the threat stays
+    # uncontrolled, which the artifact records.
+    controls = [c for c in ("pre_hpi_growth_2019_2021", "unemployment_rate") if c in annual.columns]
 
     # --- exposure distribution + balance ------------------------------------
     written["exposure_distribution"] = write_artifact(
@@ -499,6 +504,7 @@ def run_event_studies(cfg: Config) -> dict[str, Path]:
                 "did_two_period": did,
                 "frequency": "annual",
                 "reference_year": ref_year,
+                "identification_threats": _threat_status(annual),
             },
             caveats=caveats,
         )
@@ -652,6 +658,40 @@ def run_event_studies(cfg: Config) -> dict[str, Path]:
             caveats=["Unavailable outcomes are NOT reported as null results."],
         )
     return written
+
+
+def _threat_status(panel: pl.DataFrame) -> dict[str, str]:
+    """Which documented identification threats this run actually controls for.
+
+    Recorded on every event-study artifact so a reader can see, without opening the
+    strategy document, which threats were addressed and which were merely noted.
+    """
+    return {
+        "pandemic_demand_reallocation": (
+            "CONTROLLED via pre_hpi_growth_2019_2021"
+            if "pre_hpi_growth_2019_2021" in panel.columns
+            else "UNCONTROLLED"
+        ),
+        "local_labour_shocks": (
+            "CONTROLLED via contemporaneous state unemployment rate (BLS LAUS)"
+            if "unemployment_rate" in panel.columns
+            else "UNCONTROLLED -- optional BLS LAUS source unavailable"
+        ),
+        "differential_refinancing_booms": (
+            "PARTIALLY: refi outcomes labeled mechanically contaminated; "
+            "pre_refi_count_2020_2021 available as a robustness control"
+            if "pre_refi_count_2020_2021" in panel.columns
+            else "UNCONTROLLED"
+        ),
+        "remote_work_exposure": "UNCONTROLLED -- no teleworkable-share adapter",
+        "national_monetary_policy_endogeneity": (
+            "ABSORBED by period fixed effects; only relative effects are identified"
+        ),
+        "geography_specific_rate_dispersion": (
+            "UNCONTROLLED -- PMMS is national; the gap carries measurement error"
+        ),
+        "spillovers": "UNCORRECTED -- biases estimates toward zero",
+    }
 
 
 def _outcome_definition(outcome: str) -> str:

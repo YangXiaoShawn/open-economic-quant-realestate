@@ -13,7 +13,8 @@ Rules implemented here:
 2. **The as-of date defaults to the first day of month ``m``.** A borrower acting
    during month ``m`` could only have observed rates published before it began, so
    this is the conservative choice. ``as_of="month_end"`` is available as a
-   robustness cell and is *less* conservative.
+   robustness cell (``month_end_rate_alignment`` in
+   ``outputs/hazards/sensitivity_cells``) and is *less* conservative.
 3. **Publication lag.** PMMS results are published on the Thursday of the survey
    week. Setting ``publication_lag_days`` (default 0, since the survey date in the
    file already is the Thursday release date) shifts availability further.

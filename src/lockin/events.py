@@ -371,7 +371,8 @@ def write_loan_events(cfg: Config, events: pl.DataFrame) -> tuple[Path, dict[str
             "prepayment = ZB 01 only. Conflates voluntary payoff with maturity; does "
             "not distinguish refinance from sale-related payoff. NOT a move.",
             "ZB 15/16/96 are censored, which assumes their removal is uninformative "
-            "about the borrower's latent exit time. Tested by a robustness cell.",
+            "about the borrower's latent exit time. Bounded by the "
+            "admin_removals_as_prepayment cell in outputs/hazards/sensitivity_cells.",
             "Left truncation at Freddie Mac acquisition is respected but the "
             "acquisition process itself may be selective.",
             "Missing performance months contribute no risk time.",

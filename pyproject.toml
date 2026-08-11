@@ -91,6 +91,7 @@ module = [
     "lockin.adapters.pmms",
     "lockin.adapters.fhfa_hpi",
     "lockin.adapters.census_bps",
+    "lockin.adapters.bls_laus",
     "lockin.panel.*",
     "lockin.survival.*",
 ]

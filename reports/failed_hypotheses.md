@@ -6,12 +6,12 @@
 
 | | |
 |---|---|
-| Generated | `2026-08-11T05:59:16+00:00` |
-| Git commit | `36593adf3972` |
+| Generated | `2026-08-11T17:45:24+00:00` |
+| Git commit | `d85ce3220ad4-dirty` |
 | Config | `sample` (digest `9fb71e2454f98608`) |
 | Data class | **SYNTHETIC** |
 | Data period | `2021-01..2024-12` |
-| Artifacts used | 10 |
+| Artifacts used | 11 |
 
 > ⚠️ **SYNTHETIC DATA.** The loan-level numbers in this report were computed from
 > synthetic fixtures generated for engineering tests (`lockin.fixtures`, seed
@@ -31,22 +31,22 @@ The event-study runner assigns the tier from the data: a pre-trend test that fai
 
 | outcome | tier assigned | pre-trend p | reason |
 |---|---|---|---|
-| `es_hpi_growth` | `descriptive` | 0.003 | pre-trend test failed |
-| `es_log_permits_1unit` | `descriptive` | 0.007 | pre-trend test failed |
+| `es_hpi_growth` | `descriptive` | 0.002 | pre-trend test failed |
+| `es_log_permits_1unit` | `descriptive` | 0.011 | pre-trend test failed |
 | `es_monthly_hpi_growth_12m` | `descriptive` | — | not testable: no pre-period other than the reference |
 | `es_monthly_permits_1unit` | `descriptive` | — | not testable: no pre-period other than the reference |
 | `es_monthly_permits_5plus` | `descriptive` | — | not testable: no pre-period other than the reference |
 
 ## 2. Robustness grid
 
-Baseline coefficient **0.0010** (s.e. 0.0191) across 34 cells.
+Baseline coefficient **0.0010** (s.e. 0.0191) across 42 cells.
 
 | verdict | cells |
 |---|---|
-| `insignificant` | 24 |
+| `insignificant` | 32 |
 | `consistent` | 4 |
-| `placebo_pass` | 2 |
 | `not_estimable` | 2 |
+| `placebo_pass` | 2 |
 | `placebo_FAIL` | 2 |
 
 **Verdict definitions**
@@ -92,6 +92,14 @@ Baseline coefficient **0.0010** (s.e. 0.0191) across 34 cells.
 | weighting | UPB weights | `log_purchase_originations` | 0.0010 | 0.0191 | 0.05 | 156 | 26 | `insignificant` |
 | controls | no pre-period controls | `log_purchase_originations` | 0.0010 | 0.0190 | 0.05 | 156 | 26 | `insignificant` |
 | controls | all pre-period controls | `log_purchase_originations` | 0.0017 | 0.0180 | 0.10 | 156 | 26 | `insignificant` |
+| pre_shock_date | exposure frozen at 2021-06 | `log_purchase_originations` | 0.0013 | 0.0183 | 0.07 | 156 | 26 | `insignificant` |
+| pre_shock_date | exposure frozen at 2022-03 | `log_purchase_originations` | -0.0034 | 0.0178 | -0.19 | 156 | 26 | `insignificant` |
+| market_rate_series | pmms15 instead of pmms30 | `log_purchase_originations` | 0.0073 | 0.0198 | 0.37 | 156 | 26 | `insignificant` |
+| hpi_concept | pandemic control from all-transactions HPI | `log_purchase_originations` | 0.0010 | 0.0191 | 0.05 | 156 | 26 | `insignificant` |
+| hpi_concept | pandemic control from expanded-data HPI | `log_purchase_originations` | 0.0010 | 0.0191 | 0.05 | 156 | 26 | `insignificant` |
+| loan_subsample | purchase-origination loans only | `log_purchase_originations` | 0.0083 | 0.0164 | 0.51 | 156 | 26 | `insignificant` |
+| loan_subsample | primary residence only | `log_purchase_originations` | 0.0039 | 0.0185 | 0.21 | 156 | 26 | `insignificant` |
+| loan_subsample | excluding manufactured housing | `log_purchase_originations` | 0.0005 | 0.0191 | 0.03 | 156 | 26 | `insignificant` |
 | sample | exclude top-decile 2019-21 price-boom markets | `log_purchase_originations` | 0.0013 | 0.0210 | 0.06 | 138 | 23 | `insignificant` |
 | sample | exclude top-decile refinance-intensity markets | `log_purchase_originations` | 0.0043 | 0.0193 | 0.22 | 138 | 23 | `insignificant` |
 | hmda_coverage | regime=post_2018_rule | `log_purchase_originations` | — | — | — | — | — | `not_estimable` |
@@ -107,7 +115,41 @@ Baseline coefficient **0.0010** (s.e. 0.0191) across 34 cells.
 | other_outcome | log_permits_5plus | `log_permits_5plus` | -0.0618 | 0.0452 | -1.37 | 156 | 26 | `insignificant` |
 | other_outcome | denial_rate | `denial_rate` | -0.0014 | 0.0007 | -1.90 | 156 | 26 | `consistent` |
 
-## 3. Design errors caught during construction
+## 3. Loan-level sensitivity to modelling choices
+
+Three checks re-estimate the headline discrete-time prepayment hazard under alternatives the baseline deliberately does **not** use. Each corresponds to a choice documented elsewhere as an *assumption* rather than a fact.
+
+Baseline rate-gap coefficient: **-0.5248** (s.e. 0.0198).
+
+| cell | coefficient | s.e. | verdict |
+|---|---|---|---|
+| `admin_removals_as_prepayment` | -0.4353 | 0.0170 | **large_shift** |
+| `payment_gap_fresh_term` | -1.4727 | 0.0780 | **large_shift** |
+| `month_end_rate_alignment` | -0.4896 | 0.0189 | **moderate_shift** |
+
+Verdicts are measured in **baseline standard errors**:
+
+- `consistent`: moves the baseline coefficient by less than 1 baseline s.e.
+- `moderate_shift`: 1 to 2 baseline s.e.
+- `large_shift`: more than 2 baseline s.e., same sign
+- `sign_flip`: opposite sign
+- `not_estimable`: the alternative could not be fitted
+
+**`admin_removals_as_prepayment`** — ZB 15/16/96 counted as prepayment rather than censored
+
+> The baseline censors these because whole-loan sales, RPL securitizations, and defect repurchases are Freddie Mac portfolio actions. This cell bounds the error if that censoring is informative.
+
+**`payment_gap_fresh_term`** — payment-equivalent lock-in cost computed against a fresh 360-month term instead of the remaining term
+
+> Re-extending to a fresh term lowers the measured payment shock, so the fresh-term definition is the more conservative measure of lock-in cost for a trade-up buyer and the less conservative one for a borrower late in their term.
+
+**`month_end_rate_alignment`** — market rate is the last observation available on the LAST day of the month rather than the first
+
+> Still no look-ahead: the borrower may only see rates published within the month they acted in. A large shift would mean the coefficient is sensitive to the within-month timing convention.
+
+**These are fragilities, not bugs.** `admin_removals_as_prepayment`, `payment_gap_fresh_term`, `month_end_rate_alignment` move the coefficient by more than one baseline standard error. That means the corresponding modelling choice is doing real work, and it should be stated whenever the magnitude is quoted.
+
+## 4. Design errors caught during construction
 
 These were genuine mistakes in this project, found by diagnostics rather than by inspection. They are recorded because the diagnostic that caught each one is now part of the pipeline.
 
@@ -119,7 +161,7 @@ These were genuine mistakes in this project, found by diagnostics rather than by
 | D019 | The annual panel was built only over years with an active mortgage stock (2021+), leaving **no pre-shock periods**, so pre-trends were untestable and every result was auto-demoted. | Every event study reported `n_pre_coefficients = 0`. | The panel now spans the union of outcome years (2018+); exposure is a geography-level constant legitimately attached to pre-shock years. |
 | D009 | The config asked FHFA for **monthly** purchase-only HPI at **state** level, a combination FHFA does not publish (monthly purchase-only is national and census-division only). The filter matched zero rows. | `load_series` returned an empty frame and the LTV scaling silently degraded. | Default is now quarterly; `load_series` raises with the full list of published combinations; quarterly→monthly expansion is labeled in `index_basis`. |
 
-## 4. Hypotheses this project cannot test at all
+## 5. Hypotheses this project cannot test at all
 
 Not failures of execution — failures of data availability. Recording them prevents a future reader from assuming they were tested and passed.
 
@@ -145,20 +187,22 @@ Not failures of execution — failures of data availability. Recording them prev
 | `eventstudy/es_monthly_hpi_growth_12m` | `descriptive` | U.S. states present in both the Freddie Mac loan sample and the public… | geography-event-year (unweighted OLS) |
 | `eventstudy/es_monthly_permits_1unit` | `descriptive` | U.S. states present in both the Freddie Mac loan sample and the public… | geography-event-year (unweighted OLS) |
 | `eventstudy/es_monthly_permits_5plus` | `descriptive` | U.S. states present in both the Freddie Mac loan sample and the public… | geography-event-year (unweighted OLS) |
+| `hazards/sensitivity_cells` | `hazard_association` | Loans in the ingested Freddie Mac Single-Family cohorts: conventional,… | loan-month |
 
 ### Source versions
 
 | dataset | schema@retrieved#checksum |
 |---|---|
-| `active_mortgage_stock` | `active-stock-v1@2026-08-11T05:49:58+00:00#336fc723d417` |
+| `active_mortgage_stock` | `active-stock-v1@2026-08-11T17:43:39+00:00#336fc723d417` |
+| `bls_laus` | `bls-api-v2-laus-state-v1@2026-08-11T17:41:19+00:00#8cd9335cc5ae` |
 | `census_bps` | `census-bps-state-monthly-v1@2026-08-11T00:56:23+00:00#a88b1ad2c127` |
 | `fhfa_hpi` | `fhfa-hpi-master-v1@2026-08-11T00:54:48+00:00#8ab042e042ff` |
 | `freddie_llds_synthetic_fixtures` | `freddie-llds-2026-08-10@2026-08-11T05:49:57+00:00#6b358e5f7d60` |
 | `hmda` | `cfpb-data-browser-aggregations-v2@2026-08-11T01:07:30+00:00#6946b46cf136` |
 | `loan_episodes` | `loan-episodes-v1@2026-08-11T05:49:58+00:00#7487945b2064` |
 | `loan_events` | `loan-events-v1@2026-08-11T05:49:57+00:00#4a00c7112e61` |
-| `local_market_panel_annual` | `local-panel-v1@2026-08-11T05:49:58+00:00#f21a4a866b67` |
-| `local_market_panel_monthly` | `local-panel-v1@2026-08-11T05:49:58+00:00#31ea625aeb82` |
+| `local_market_panel_annual` | `local-panel-v1@2026-08-11T17:43:39+00:00#f0a464fb2370` |
+| `local_market_panel_monthly` | `local-panel-v1@2026-08-11T17:43:39+00:00#4d56f18bd056` |
 | `pmms` | `pmms-history-v1@2026-08-11T00:54:48+00:00#c74cccece4a6` |
 
 ---

@@ -116,7 +116,8 @@ def payment_gap_fresh_term(
 
     Compares the borrower's current scheduled payment on the remaining term
     against a new ``fresh_term_months`` loan at the market rate for the same
-    balance. Used as a robustness cell, not the default.
+    balance. Exercised by the ``payment_gap_fresh_term`` cell in
+    ``outputs/hazards/sensitivity_cells``; not the default.
     """
     b = np.asarray(balance, dtype=float)
     n = np.asarray(remaining_term_months, dtype=float)

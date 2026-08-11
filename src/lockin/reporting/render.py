@@ -1121,8 +1121,59 @@ def render_failed(cfg: Config) -> Path:
                 )
             b.append("")
 
+    sens = ctx.get("hazards", "sensitivity_cells")
+    if sens:
+        rs = sens["result"]
+        b += [
+            "## 3. Loan-level sensitivity to modelling choices",
+            "",
+            "Three checks re-estimate the headline discrete-time prepayment hazard under "
+            "alternatives the baseline deliberately does **not** use. Each corresponds to "
+            "a choice documented elsewhere as an *assumption* rather than a fact.",
+            "",
+            f"Baseline rate-gap coefficient: **{_fmt(rs['baseline_rate_gap_coef'])}** "
+            f"(s.e. {_fmt(rs['baseline_std_err'])}).",
+            "",
+            "| cell | coefficient | s.e. | verdict |",
+            "|---|---|---|---|",
+        ]
+        for c in rs["cells"]:
+            if c["cell"] == "baseline":
+                continue
+            b.append(
+                f"| `{c['cell']}` | {_fmt(c.get('coef'))} | {_fmt(c.get('std_err'))} | "
+                f"**{c.get('verdict')}** |"
+            )
+        b += ["", "Verdicts are measured in **baseline standard errors**:", ""]
+        for k, v in rs["verdict_definitions"].items():
+            b.append(f"- `{k}`: {v}")
+        b += [""]
+        for c in rs["cells"]:
+            if c["cell"] == "baseline" or not c.get("interpretation"):
+                continue
+            b += [
+                f"**`{c['cell']}`** — {c.get('description', '')}",
+                "",
+                f"> {c['interpretation']}",
+                "",
+            ]
+        movers = [
+            c
+            for c in rs["cells"]
+            if c.get("verdict") in ("large_shift", "sign_flip", "moderate_shift")
+        ]
+        if movers:
+            b += [
+                "**These are fragilities, not bugs.** "
+                + ", ".join(f"`{c['cell']}`" for c in movers)
+                + " move the coefficient by more than one baseline standard error. That "
+                "means the corresponding modelling choice is doing real work, and it "
+                "should be stated whenever the magnitude is quoted.",
+                "",
+            ]
+
     b += [
-        "## 3. Design errors caught during construction",
+        "## 4. Design errors caught during construction",
         "",
         "These were genuine mistakes in this project, found by diagnostics rather than by "
         "inspection. They are recorded because the diagnostic that caught each one is now "
@@ -1164,7 +1215,7 @@ def render_failed(cfg: Config) -> Path:
     ]
 
     b += [
-        "## 4. Hypotheses this project cannot test at all",
+        "## 5. Hypotheses this project cannot test at all",
         "",
         "Not failures of execution — failures of data availability. Recording them "
         "prevents a future reader from assuming they were tested and passed.",

@@ -269,3 +269,47 @@ class TestJoin:
         )
         j = perf.join(orig, on="loan_seq_no", how="inner")
         assert j.height == 1
+
+
+class TestLayoutYaml:
+    """The committed YAML field map must never drift from the schema module."""
+
+    def test_layout_yaml_matches_schema(self) -> None:
+        import yaml
+
+        from lockin.config import REPO_ROOT
+        from lockin.schemas.freddie import layout_spec
+
+        p = REPO_ROOT / "data" / "reference" / "freddie_llds_layout.yaml"
+        assert p.exists(), (
+            "data/reference/freddie_llds_layout.yaml is missing. It is referenced by "
+            "docs/DECISION_LOG.md D003 and data/LICENSE_AND_REDISTRIBUTION.md. "
+            "Regenerate it with `make emit-layout`."
+        )
+        on_disk = yaml.safe_load(p.read_text())
+        assert on_disk == layout_spec(), (
+            "the committed layout YAML disagrees with lockin.schemas.freddie. "
+            "Run `make emit-layout` -- do not hand-edit the YAML."
+        )
+
+    def test_layout_yaml_documents_the_zb_priority_table(self) -> None:
+        import yaml
+
+        from lockin.config import REPO_ROOT
+
+        spec = yaml.safe_load(
+            (REPO_ROOT / "data" / "reference" / "freddie_llds_layout.yaml").read_text()
+        )
+        zb = {z["code"]: z for z in spec["zero_balance_codes"]}
+        assert [z["code"] for z in spec["zero_balance_codes"]] == [
+            "15",
+            "16",
+            "09",
+            "96",
+            "03",
+            "02",
+            "01",
+        ], "zero_balance_codes must be listed in official priority order"
+        assert zb["01"]["event_class"] == "prepayment"
+        assert zb["15"]["treated_as_censoring"] is True
+        assert zb["02"]["event_class"] == "credit_event"

@@ -6,8 +6,8 @@
 
 | | |
 |---|---|
-| Generated | `2026-08-11T05:59:16+00:00` |
-| Git commit | `36593adf3972` |
+| Generated | `2026-08-11T17:45:24+00:00` |
+| Git commit | `d85ce3220ad4-dirty` |
 | Config | `sample` (digest `9fb71e2454f98608`) |
 | Data class | **SYNTHETIC** |
 | Data period | `2021-01..2024-12` |
@@ -75,21 +75,21 @@ Least exposed: `FL` (0.823), `WI` (0.817), `IN` (0.809), `SC` (0.781), `NV` (0.7
 - Outcome definition: HMDA purchase-loan denials divided by purchase-loan applications. A credit-conditions proxy, used as a placebo outcome.
 - 156 observations, 26 geographies, 6 periods, clustered by geography (26 clusters).
 - Coefficient units: change in denial_rate per ONE STANDARD DEVIATION of pre_locked_share_upb_200 (sd = 0.0307), relative to year = 2021.
-- Controls: `pre_hpi_growth_2019_2021`. Fixed effects: `geography`, `year`.
+- Controls: `pre_hpi_growth_2019_2021`, `unemployment_rate`. Fixed effects: `geography`, `year`.
 
-**Pre-trend test** (joint Wald that all pre-period interactions are zero): p = 0.629; wild-cluster-bootstrap p = 0.654 → **PASSES** at α = 0.10.
+**Pre-trend test** (joint Wald that all pre-period interactions are zero): p = 0.627; wild-cluster-bootstrap p = 0.683 → **PASSES** at α = 0.10.
 
 | period | coef | s.e. | 95% CI | |
 |---|---|---|---|---|
 | 2018 | 0.0008 | 0.0009 | [-0.001, 0.003] | pre |
 | 2019 | 0.0002 | 0.0008 | [-0.001, 0.002] | pre |
-| 2020 | 0.0004 | 0.0010 | [-0.002, 0.002] | pre |
+| 2020 | 0.0004 | 0.0011 | [-0.002, 0.003] | pre |
 | 2021 | 0.0000 | 0.0000 | [0.000, 0.000] | reference |
 | 2022 | -0.0011 | 0.0009 | [-0.003, 0.001] | post |
-| 2023 | -0.0010 | 0.0013 | [-0.004, 0.001] | post |
+| 2023 | -0.0010 | 0.0013 | [-0.004, 0.002] | post |
 
 Mean post-shock effect: **-0.0011**.
- Collapsed pre/post DiD: **-0.0014** (s.e. 0.0007, t = -1.90, 26 clusters).
+ Collapsed pre/post DiD: **-0.0014** (s.e. 0.0007, t = -1.89, 26 clusters).
 
 Caveats:
 - Only RELATIVE effects across exposure are identified; the common national rate shock is absorbed by period fixed effects.
@@ -101,24 +101,24 @@ Caveats:
 - Outcome definition: annual sum of monthly log changes in the FHFA purchase-only state house price index. An INDEX, not a property value.
 - 182 observations, 26 geographies, 7 periods, clustered by geography (26 clusters).
 - Coefficient units: change in hpi_growth per ONE STANDARD DEVIATION of pre_locked_share_upb_200 (sd = 0.0307), relative to year = 2021.
-- Controls: `pre_hpi_growth_2019_2021`. Fixed effects: `geography`, `year`.
+- Controls: `pre_hpi_growth_2019_2021`, `unemployment_rate`. Fixed effects: `geography`, `year`.
 
-**Pre-trend test** (joint Wald that all pre-period interactions are zero): p = 0.003; wild-cluster-bootstrap p = 0.159 → **FAILS** at α = 0.10.
+**Pre-trend test** (joint Wald that all pre-period interactions are zero): p = 0.002; wild-cluster-bootstrap p = 0.148 → **FAILS** at α = 0.10.
 
 > This outcome is **demoted to `descriptive`** and carries no causal language. It is recorded in `reports/failed_hypotheses.md`.
 
 | period | coef | s.e. | 95% CI | |
 |---|---|---|---|---|
-| 2018 | 0.0082 | 0.0040 | [0.000, 0.016] | pre |
-| 2019 | 0.0160 | 0.0051 | [0.006, 0.026] | pre |
-| 2020 | 0.0157 | 0.0043 | [0.007, 0.024] | pre |
+| 2018 | 0.0080 | 0.0039 | [0.000, 0.016] | pre |
+| 2019 | 0.0158 | 0.0052 | [0.006, 0.026] | pre |
+| 2020 | 0.0152 | 0.0040 | [0.007, 0.023] | pre |
 | 2021 | 0.0000 | 0.0000 | [0.000, 0.000] | reference |
-| 2022 | 0.0138 | 0.0098 | [-0.005, 0.033] | post |
-| 2023 | 0.0145 | 0.0059 | [0.003, 0.026] | post |
-| 2024 | 0.0166 | 0.0055 | [0.006, 0.027] | post |
+| 2022 | 0.0135 | 0.0097 | [-0.005, 0.032] | post |
+| 2023 | 0.0142 | 0.0056 | [0.003, 0.025] | post |
+| 2024 | 0.0164 | 0.0054 | [0.006, 0.027] | post |
 
-Mean post-shock effect: **0.0150**.
- Collapsed pre/post DiD: **0.0050** (s.e. 0.0041, t = 1.23, 26 clusters).
+Mean post-shock effect: **0.0147**.
+ Collapsed pre/post DiD: **0.0049** (s.e. 0.0042, t = 1.16, 26 clusters).
 
 Caveats:
 - PRE-TREND TEST FAILED (or was not testable). This result is DEMOTED to descriptive and must not carry causal language. Recorded in reports/failed_hypotheses.md.
@@ -131,23 +131,23 @@ Caveats:
 - Outcome definition: log Census BPS single-family units AUTHORIZED (not starts, not completions).
 - 156 observations, 26 geographies, 6 periods, clustered by geography (26 clusters).
 - Coefficient units: change in log_permits_1unit per ONE STANDARD DEVIATION of pre_locked_share_upb_200 (sd = 0.0307), relative to year = 2021.
-- Controls: `pre_hpi_growth_2019_2021`. Fixed effects: `geography`, `year`.
+- Controls: `pre_hpi_growth_2019_2021`, `unemployment_rate`. Fixed effects: `geography`, `year`.
 
-**Pre-trend test** (joint Wald that all pre-period interactions are zero): p = 0.007; wild-cluster-bootstrap p = 0.050 → **FAILS** at α = 0.10.
+**Pre-trend test** (joint Wald that all pre-period interactions are zero): p = 0.011; wild-cluster-bootstrap p = 0.125 → **FAILS** at α = 0.10.
 
 > This outcome is **demoted to `descriptive`** and carries no causal language. It is recorded in `reports/failed_hypotheses.md`.
 
 | period | coef | s.e. | 95% CI | |
 |---|---|---|---|---|
-| 2018 | 0.0387 | 0.0238 | [-0.008, 0.085] | pre |
-| 2019 | 0.0367 | 0.0129 | [0.011, 0.062] | pre |
-| 2020 | 0.0155 | 0.0085 | [-0.001, 0.032] | pre |
+| 2018 | 0.0343 | 0.0201 | [-0.005, 0.074] | pre |
+| 2019 | 0.0336 | 0.0109 | [0.012, 0.055] | pre |
+| 2020 | 0.0061 | 0.0114 | [-0.016, 0.029] | pre |
 | 2021 | 0.0000 | 0.0000 | [0.000, 0.000] | reference |
-| 2022 | 0.0052 | 0.0192 | [-0.032, 0.043] | post |
-| 2023 | -0.0149 | 0.0191 | [-0.052, 0.023] | post |
+| 2022 | -0.0008 | 0.0198 | [-0.040, 0.038] | post |
+| 2023 | -0.0194 | 0.0174 | [-0.053, 0.015] | post |
 
-Mean post-shock effect: **-0.0049**.
- Collapsed pre/post DiD: **-0.0276** (s.e. 0.0169, t = -1.63, 26 clusters).
+Mean post-shock effect: **-0.0101**.
+ Collapsed pre/post DiD: **-0.0286** (s.e. 0.0183, t = -1.56, 26 clusters).
 
 Caveats:
 - PRE-TREND TEST FAILED (or was not testable). This result is DEMOTED to descriptive and must not carry causal language. Recorded in reports/failed_hypotheses.md.
@@ -160,21 +160,21 @@ Caveats:
 - Outcome definition: log Census BPS 5+-unit units authorized.
 - 156 observations, 26 geographies, 6 periods, clustered by geography (26 clusters).
 - Coefficient units: change in log_permits_5plus per ONE STANDARD DEVIATION of pre_locked_share_upb_200 (sd = 0.0307), relative to year = 2021.
-- Controls: `pre_hpi_growth_2019_2021`. Fixed effects: `geography`, `year`.
+- Controls: `pre_hpi_growth_2019_2021`, `unemployment_rate`. Fixed effects: `geography`, `year`.
 
-**Pre-trend test** (joint Wald that all pre-period interactions are zero): p = 0.353; wild-cluster-bootstrap p = 0.280 → **PASSES** at α = 0.10.
+**Pre-trend test** (joint Wald that all pre-period interactions are zero): p = 0.454; wild-cluster-bootstrap p = 0.459 → **PASSES** at α = 0.10.
 
 | period | coef | s.e. | 95% CI | |
 |---|---|---|---|---|
-| 2018 | 0.0123 | 0.0509 | [-0.088, 0.112] | pre |
-| 2019 | 0.0577 | 0.0459 | [-0.032, 0.148] | pre |
-| 2020 | 0.0117 | 0.0285 | [-0.044, 0.068] | pre |
+| 2018 | 0.0123 | 0.0501 | [-0.086, 0.111] | pre |
+| 2019 | 0.0578 | 0.0455 | [-0.031, 0.147] | pre |
+| 2020 | 0.0118 | 0.0308 | [-0.049, 0.072] | pre |
 | 2021 | 0.0000 | 0.0000 | [0.000, 0.000] | reference |
-| 2022 | -0.0200 | 0.0404 | [-0.099, 0.059] | post |
-| 2023 | -0.0627 | 0.0586 | [-0.178, 0.052] | post |
+| 2022 | -0.0199 | 0.0387 | [-0.096, 0.056] | post |
+| 2023 | -0.0627 | 0.0581 | [-0.177, 0.051] | post |
 
-Mean post-shock effect: **-0.0414**.
- Collapsed pre/post DiD: **-0.0618** (s.e. 0.0452, t = -1.37, 26 clusters).
+Mean post-shock effect: **-0.0413**.
+ Collapsed pre/post DiD: **-0.0618** (s.e. 0.0455, t = -1.36, 26 clusters).
 
 Caveats:
 - Only RELATIVE effects across exposure are identified; the common national rate shock is absorbed by period fixed effects.
@@ -186,21 +186,21 @@ Caveats:
 - Outcome definition: log HMDA home-purchase loans ORIGINATED (action taken = 1, loan purpose = 1). Applications and originations, not property sales; all-cash purchases are absent.
 - 156 observations, 26 geographies, 6 periods, clustered by geography (26 clusters).
 - Coefficient units: change in log_purchase_originations per ONE STANDARD DEVIATION of pre_locked_share_upb_200 (sd = 0.0307), relative to year = 2021.
-- Controls: `pre_hpi_growth_2019_2021`. Fixed effects: `geography`, `year`.
+- Controls: `pre_hpi_growth_2019_2021`, `unemployment_rate`. Fixed effects: `geography`, `year`.
 
-**Pre-trend test** (joint Wald that all pre-period interactions are zero): p = 0.342; wild-cluster-bootstrap p = 0.562 → **PASSES** at α = 0.10.
+**Pre-trend test** (joint Wald that all pre-period interactions are zero): p = 0.407; wild-cluster-bootstrap p = 0.621 → **PASSES** at α = 0.10.
 
 | period | coef | s.e. | 95% CI | |
 |---|---|---|---|---|
-| 2018 | -0.0023 | 0.0123 | [-0.026, 0.022] | pre |
-| 2019 | -0.0002 | 0.0100 | [-0.020, 0.019] | pre |
-| 2020 | -0.0057 | 0.0141 | [-0.033, 0.022] | pre |
+| 2018 | -0.0039 | 0.0126 | [-0.029, 0.021] | pre |
+| 2019 | -0.0013 | 0.0119 | [-0.025, 0.022] | pre |
+| 2020 | -0.0091 | 0.0136 | [-0.036, 0.018] | pre |
 | 2021 | 0.0000 | 0.0000 | [0.000, 0.000] | reference |
-| 2022 | 0.0077 | 0.0174 | [-0.026, 0.042] | post |
-| 2023 | -0.0098 | 0.0220 | [-0.053, 0.033] | post |
+| 2022 | 0.0055 | 0.0179 | [-0.029, 0.041] | post |
+| 2023 | -0.0114 | 0.0230 | [-0.056, 0.034] | post |
 
-Mean post-shock effect: **-0.0011**.
- Collapsed pre/post DiD: **0.0010** (s.e. 0.0191, t = 0.05, 26 clusters).
+Mean post-shock effect: **-0.0029**.
+ Collapsed pre/post DiD: **0.0007** (s.e. 0.0197, t = 0.03, 26 clusters).
 
 Caveats:
 - Only RELATIVE effects across exposure are identified; the common national rate shock is absorbed by period fixed effects.
@@ -212,21 +212,21 @@ Caveats:
 - Outcome definition: log HMDA refinance loans originated (loan purpose 31 or 32). MECHANICALLY CONTAMINATED by pipeline exhaustion.
 - 156 observations, 26 geographies, 6 periods, clustered by geography (26 clusters).
 - Coefficient units: change in log_refi_originations per ONE STANDARD DEVIATION of pre_locked_share_upb_200 (sd = 0.0307), relative to year = 2021.
-- Controls: `pre_hpi_growth_2019_2021`. Fixed effects: `geography`, `year`.
+- Controls: `pre_hpi_growth_2019_2021`, `unemployment_rate`. Fixed effects: `geography`, `year`.
 
-**Pre-trend test** (joint Wald that all pre-period interactions are zero): p = 0.364; wild-cluster-bootstrap p = 0.613 → **PASSES** at α = 0.10.
+**Pre-trend test** (joint Wald that all pre-period interactions are zero): p = 0.682; wild-cluster-bootstrap p = 0.742 → **PASSES** at α = 0.10.
 
 | period | coef | s.e. | 95% CI | |
 |---|---|---|---|---|
-| 2018 | -0.0023 | 0.0230 | [-0.047, 0.043] | pre |
-| 2019 | -0.0096 | 0.0216 | [-0.052, 0.033] | pre |
-| 2020 | 0.0111 | 0.0153 | [-0.019, 0.041] | pre |
+| 2018 | -0.0061 | 0.0192 | [-0.044, 0.032] | pre |
+| 2019 | -0.0123 | 0.0190 | [-0.049, 0.025] | pre |
+| 2020 | 0.0028 | 0.0217 | [-0.040, 0.045] | pre |
 | 2021 | 0.0000 | 0.0000 | [0.000, 0.000] | reference |
-| 2022 | -0.0565 | 0.0391 | [-0.133, 0.020] | post |
-| 2023 | -0.0597 | 0.0863 | [-0.229, 0.110] | post |
+| 2022 | -0.0618 | 0.0414 | [-0.143, 0.019] | post |
+| 2023 | -0.0636 | 0.0890 | [-0.238, 0.111] | post |
 
-Mean post-shock effect: **-0.0581**.
- Collapsed pre/post DiD: **-0.0579** (s.e. 0.0657, t = -0.88, 26 clusters).
+Mean post-shock effect: **-0.0627**.
+ Collapsed pre/post DiD: **-0.0588** (s.e. 0.0677, t = -0.87, 26 clusters).
 
 Caveats:
 - Only RELATIVE effects across exposure are identified; the common national rate shock is absorbed by period fixed effects.
@@ -239,7 +239,7 @@ Caveats:
 - Outcome definition: 12-month log change in the FHFA purchase-only state HPI.
 - 104 observations, 26 geographies, 4 periods, clustered by geography (26 clusters).
 - Coefficient units: change in hpi_growth_12m per ONE STANDARD DEVIATION of pre_locked_share_upb_200 (sd = 0.0308), relative to event_year = -1.
-- Controls: `pre_hpi_growth_2019_2021`. Fixed effects: `geography`, `event_year`.
+- Controls: `pre_hpi_growth_2019_2021`, `unemployment_rate`. Fixed effects: `geography`, `event_year`.
 
 **Pre-trend test** (joint Wald that all pre-period interactions are zero): *not testable: no pre-period other than the reference* → **FAILS** at α = 0.10.
 
@@ -248,11 +248,11 @@ Caveats:
 | period | coef | s.e. | 95% CI | |
 |---|---|---|---|---|
 | -1 | 0.0000 | 0.0000 | [0.000, 0.000] | reference |
-| 0 | -0.0045 | 0.0056 | [-0.015, 0.006] | post |
-| 1 | 0.0120 | 0.0101 | [-0.008, 0.032] | post |
-| 2 | 0.0082 | 0.0059 | [-0.003, 0.020] | post |
+| 0 | -0.0048 | 0.0067 | [-0.018, 0.008] | post |
+| 1 | 0.0110 | 0.0109 | [-0.010, 0.032] | post |
+| 2 | 0.0076 | 0.0062 | [-0.005, 0.020] | post |
 
-Mean post-shock effect: **0.0052**.
+Mean post-shock effect: **0.0046**.
 
 Caveats:
 - PRE-TREND TEST FAILED or not estimable -- DEMOTED to descriptive.
@@ -265,7 +265,7 @@ Caveats:
 - Outcome definition: Census BPS single-family units authorized.
 - 78 observations, 26 geographies, 3 periods, clustered by geography (26 clusters).
 - Coefficient units: change in log_permits_1unit_m per ONE STANDARD DEVIATION of pre_locked_share_upb_200 (sd = 0.0308), relative to event_year = -1.
-- Controls: `pre_hpi_growth_2019_2021`. Fixed effects: `geography`, `event_year`.
+- Controls: `pre_hpi_growth_2019_2021`, `unemployment_rate`. Fixed effects: `geography`, `event_year`.
 
 **Pre-trend test** (joint Wald that all pre-period interactions are zero): *not testable: no pre-period other than the reference* → **FAILS** at α = 0.10.
 
@@ -274,10 +274,10 @@ Caveats:
 | period | coef | s.e. | 95% CI | |
 |---|---|---|---|---|
 | -1 | 0.0000 | 0.0000 | [0.000, 0.000] | reference |
-| 0 | 0.0122 | 0.0269 | [-0.040, 0.065] | post |
-| 1 | -0.0152 | 0.0248 | [-0.064, 0.033] | post |
+| 0 | 0.0111 | 0.0297 | [-0.047, 0.069] | post |
+| 1 | -0.0184 | 0.0265 | [-0.070, 0.034] | post |
 
-Mean post-shock effect: **-0.0015**.
+Mean post-shock effect: **-0.0036**.
 
 Caveats:
 - PRE-TREND TEST FAILED or not estimable -- DEMOTED to descriptive.
@@ -290,7 +290,7 @@ Caveats:
 - Outcome definition: Census BPS 5+-unit units authorized.
 - 78 observations, 26 geographies, 3 periods, clustered by geography (26 clusters).
 - Coefficient units: change in log_permits_5plus_m per ONE STANDARD DEVIATION of pre_locked_share_upb_200 (sd = 0.0308), relative to event_year = -1.
-- Controls: `pre_hpi_growth_2019_2021`. Fixed effects: `geography`, `event_year`.
+- Controls: `pre_hpi_growth_2019_2021`, `unemployment_rate`. Fixed effects: `geography`, `event_year`.
 
 **Pre-trend test** (joint Wald that all pre-period interactions are zero): *not testable: no pre-period other than the reference* → **FAILS** at α = 0.10.
 
@@ -299,10 +299,10 @@ Caveats:
 | period | coef | s.e. | 95% CI | |
 |---|---|---|---|---|
 | -1 | 0.0000 | 0.0000 | [0.000, 0.000] | reference |
-| 0 | -0.0288 | 0.0534 | [-0.134, 0.076] | post |
-| 1 | -0.0670 | 0.0825 | [-0.229, 0.095] | post |
+| 0 | -0.0249 | 0.0509 | [-0.125, 0.075] | post |
+| 1 | -0.0554 | 0.0732 | [-0.199, 0.088] | post |
 
-Mean post-shock effect: **-0.0479**.
+Mean post-shock effect: **-0.0401**.
 
 Caveats:
 - PRE-TREND TEST FAILED or not estimable -- DEMOTED to descriptive.
@@ -318,14 +318,14 @@ Headline outcome: `log_purchase_originations`.
 | placebo date | coef | s.e. | t |
 |---|---|---|---|
 | 2018-01 | *no pre or no post periods* | | |
-| 2019-06 | 0.0004 | 0.0112 | 0.03 |
+| 2019-06 | 0.0004 | 0.0092 | 0.05 |
 
 **Placebo outcomes**
 
 | outcome | coef | s.e. | t |
 |---|---|---|---|
-| `log_permits_5plus` | -0.0618 | 0.0452 | -1.37 |
-| `denial_rate` | -0.0014 | 0.0007 | -1.90 |
+| `log_permits_5plus` | -0.0618 | 0.0455 | -1.36 |
+| `denial_rate` | -0.0014 | 0.0007 | -1.89 |
 
 > A significant placebo effect of the same sign as the main estimate is evidence AGAINST the lock-in interpretation and is reported in reports/failed_hypotheses.md.
 
@@ -364,15 +364,16 @@ Full treatment: `docs/IDENTIFICATION_STRATEGY.md` §3.
 
 | dataset | schema@retrieved#checksum |
 |---|---|
-| `active_mortgage_stock` | `active-stock-v1@2026-08-11T05:49:58+00:00#336fc723d417` |
+| `active_mortgage_stock` | `active-stock-v1@2026-08-11T17:43:39+00:00#336fc723d417` |
+| `bls_laus` | `bls-api-v2-laus-state-v1@2026-08-11T17:41:19+00:00#8cd9335cc5ae` |
 | `census_bps` | `census-bps-state-monthly-v1@2026-08-11T00:56:23+00:00#a88b1ad2c127` |
 | `fhfa_hpi` | `fhfa-hpi-master-v1@2026-08-11T00:54:48+00:00#8ab042e042ff` |
 | `freddie_llds_synthetic_fixtures` | `freddie-llds-2026-08-10@2026-08-11T05:49:57+00:00#6b358e5f7d60` |
 | `hmda` | `cfpb-data-browser-aggregations-v2@2026-08-11T01:07:30+00:00#6946b46cf136` |
 | `loan_episodes` | `loan-episodes-v1@2026-08-11T05:49:58+00:00#7487945b2064` |
 | `loan_events` | `loan-events-v1@2026-08-11T05:49:57+00:00#4a00c7112e61` |
-| `local_market_panel_annual` | `local-panel-v1@2026-08-11T05:49:58+00:00#f21a4a866b67` |
-| `local_market_panel_monthly` | `local-panel-v1@2026-08-11T05:49:58+00:00#31ea625aeb82` |
+| `local_market_panel_annual` | `local-panel-v1@2026-08-11T17:43:39+00:00#f0a464fb2370` |
+| `local_market_panel_monthly` | `local-panel-v1@2026-08-11T17:43:39+00:00#4d56f18bd056` |
 | `pmms` | `pmms-history-v1@2026-08-11T00:54:48+00:00#c74cccece4a6` |
 
 ---

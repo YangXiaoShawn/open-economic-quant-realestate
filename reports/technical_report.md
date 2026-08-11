@@ -6,8 +6,8 @@
 
 | | |
 |---|---|
-| Generated | `2026-08-11T05:59:16+00:00` |
-| Git commit | `36593adf3972` |
+| Generated | `2026-08-11T17:45:24+00:00` |
+| Git commit | `d85ce3220ad4-dirty` |
 | Config | `sample` (digest `9fb71e2454f98608`) |
 | Data class | **SYNTHETIC** |
 | Data period | `2021-01..2024-12` |
@@ -114,22 +114,22 @@ Assumptions, threats, and the decision rule for causal language: `docs/IDENTIFIC
 
 ## 5. Market-level results
 
-Headline outcome: log HMDA purchase originations. Tier `quasi_experimental`; pre-trend p = 0.342 (passes at α = 0.10).
+Headline outcome: log HMDA purchase originations. Tier `quasi_experimental`; pre-trend p = 0.407 (passes at α = 0.10).
 
-Collapsed DiD: **0.0010** (s.e. 0.0191, t = 0.05, 26 clusters).
+Collapsed DiD: **0.0007** (s.e. 0.0197, t = 0.03, 26 clusters).
 
 Every outcome, its dynamic path, pre-trends, and placebos: `reports/local_market_event_study.md`. Why quantities are unambiguous and prices are not: `reports/demand_supply_decomposition.md`.
 
 ## 6. Robustness
 
-34 specification cells; 4 flagged.
+42 specification cells; 4 flagged.
 
 | verdict | cells |
 |---|---|
-| `insignificant` | 24 |
+| `insignificant` | 32 |
 | `consistent` | 4 |
-| `placebo_pass` | 2 |
 | `not_estimable` | 2 |
+| `placebo_pass` | 2 |
 | `placebo_FAIL` | 2 |
 
 Cells vary the exposure definition, the bp threshold, the weighting (count vs UPB), the control set, sample exclusions (pandemic-boom and high-refi markets), the HMDA coverage regime, panel balance, placebo shock dates, and placebo outcomes.
@@ -184,15 +184,16 @@ Every artifact records git commit, config digest, data period, and per-dataset `
 
 | dataset | schema@retrieved#checksum |
 |---|---|
-| `active_mortgage_stock` | `active-stock-v1@2026-08-11T05:49:58+00:00#336fc723d417` |
+| `active_mortgage_stock` | `active-stock-v1@2026-08-11T17:43:39+00:00#336fc723d417` |
+| `bls_laus` | `bls-api-v2-laus-state-v1@2026-08-11T17:41:19+00:00#8cd9335cc5ae` |
 | `census_bps` | `census-bps-state-monthly-v1@2026-08-11T00:56:23+00:00#a88b1ad2c127` |
 | `fhfa_hpi` | `fhfa-hpi-master-v1@2026-08-11T00:54:48+00:00#8ab042e042ff` |
 | `freddie_llds_synthetic_fixtures` | `freddie-llds-2026-08-10@2026-08-11T05:49:57+00:00#6b358e5f7d60` |
 | `hmda` | `cfpb-data-browser-aggregations-v2@2026-08-11T01:07:30+00:00#6946b46cf136` |
 | `loan_episodes` | `loan-episodes-v1@2026-08-11T05:49:58+00:00#7487945b2064` |
 | `loan_events` | `loan-events-v1@2026-08-11T05:49:57+00:00#4a00c7112e61` |
-| `local_market_panel_annual` | `local-panel-v1@2026-08-11T05:49:58+00:00#f21a4a866b67` |
-| `local_market_panel_monthly` | `local-panel-v1@2026-08-11T05:49:58+00:00#31ea625aeb82` |
+| `local_market_panel_annual` | `local-panel-v1@2026-08-11T17:43:39+00:00#f0a464fb2370` |
+| `local_market_panel_monthly` | `local-panel-v1@2026-08-11T17:43:39+00:00#4d56f18bd056` |
 | `pmms` | `pmms-history-v1@2026-08-11T00:54:48+00:00#c74cccece4a6` |
 
 ---

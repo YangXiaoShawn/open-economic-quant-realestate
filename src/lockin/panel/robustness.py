@@ -24,8 +24,121 @@ from lockin.config import Config
 from lockin.panel.build import load_panel
 from lockin.panel.eventstudy import POPULATION_STATEMENT, did_two_period, event_study
 from lockin.provenance import collect_source_versions, run_context
+from lockin.stock import predetermined_exposure
 
 Z10 = 1.645
+
+#: Alternative dates at which to freeze the coupon distribution (DECISION_LOG D008).
+ALTERNATIVE_PRE_SHOCK_DATES: tuple[str, ...] = ("2021-06", "2022-03")
+
+#: Alternative FHFA index concepts. NEVER mixed within a series -- each is used to
+#: rebuild the pandemic-boom control on its own terms.
+ALTERNATIVE_HPI_FLAVORS: tuple[str, ...] = ("all-transactions", "expanded-data")
+
+#: Loan sub-samples on which exposure is rebuilt from scratch. Each restricts the loan
+#: population entering the frozen coupon distribution.
+LOAN_SUBSAMPLES: tuple[tuple[str, pl.Expr, str], ...] = (
+    (
+        "purchase-origination loans only",
+        pl.col("loan_purpose") == "P",
+        "refinance-originated loans have a different seasoning and equity profile; "
+        "restricting to purchase originations removes that composition",
+    ),
+    (
+        "primary residence only",
+        pl.col("occupancy_status") == "P",
+        "investor and second-home borrowers face different mobility and financing "
+        "constraints, so lock-in should operate differently for them",
+    ),
+    (
+        "excluding manufactured housing",
+        pl.col("property_type") != "MH",
+        "manufactured housing has distinct financing and turnover dynamics",
+    ),
+)
+
+
+def load_config_like(cfg: Config, rates_series: str) -> Config:
+    """Shallow copy of the config with a different market-rate series.
+
+    Used by the market-rate-series cell so that exposure is genuinely recomputed at the
+    alternative series' post-shock level, rather than relabelled.
+    """
+    import copy
+
+    alt = copy.deepcopy(cfg)
+    alt.rates.series = rates_series
+    return alt
+
+
+def _pre_growth_under_flavor(cfg: Config, flavor: str) -> pl.DataFrame | None:
+    """Rebuild the 2019-21 price-growth control from a different HPI concept."""
+    from lockin.adapters import fhfa_hpi
+
+    try:
+        hpi = fhfa_hpi.load_series(
+            cfg,
+            flavor=flavor,
+            frequency="quarterly",
+            level="State",
+            seasonal=cfg.panel.hpi_seasonal,
+        )
+    except (FileNotFoundError, ValueError):
+        return None
+    sub = hpi.filter(pl.col("period").is_between(pl.date(2019, 1, 1), pl.date(2021, 12, 1)))
+    if sub.height == 0:
+        return None
+    return (
+        sub.sort(["geography", "period"])
+        .group_by("geography")
+        .agg((pl.col("hpi").last().log() - pl.col("hpi").first().log()).alias("_alt_pre_growth"))
+    )
+
+
+def _exposure_on_subsample(cfg: Config, restrict: pl.Expr) -> pl.DataFrame | None:
+    """Recompute predetermined exposure on a restricted loan population.
+
+    Mirrors :func:`lockin.stock.predetermined_exposure` but applies ``restrict`` to the
+    pre-shock loan set first, so the frozen coupon shares are those of the sub-sample.
+    """
+    from datetime import date
+
+    from lockin.episodes import scan_episodes
+    from lockin.stock import post_shock_rate_level
+
+    as_of = cfg.event_study.pre_shock_date
+    y, m = map(int, as_of.split("-"))
+    cut = date(y, m, 1)
+    post_rate, _ = post_shock_rate_level(cfg)
+    geo = "property_state" if cfg.panel.geography == "state" else "msa_code"
+
+    pre = (
+        scan_episodes(cfg)
+        .filter((pl.col("period") == cut) & restrict)
+        .select(
+            pl.col(geo).alias("geography"),
+            "note_rate",
+            "upb_start_of_month",
+        )
+        .drop_nulls()
+        .collect()
+    )
+    if pre.height == 0:
+        return None
+
+    cf_gap = pl.lit(post_rate) - pl.col("note_rate")
+    exprs: list[pl.Expr] = []
+    for t in cfg.lockin.thresholds_bp:
+        locked = cf_gap > t / 100.0
+        exprs.append(locked.mean().alias(f"locked_share_count_{t}"))
+        exprs.append(
+            (
+                pl.when(locked).then(pl.col("upb_start_of_month")).otherwise(0.0).sum()
+                / pl.col("upb_start_of_month").sum()
+            ).alias(f"locked_share_upb_{t}")
+        )
+    out = pre.group_by("geography").agg(pl.len().alias("n_loans"), *exprs)
+    return out.filter(pl.col("n_loans") >= max(cfg.panel.min_loans_per_geography // 2, 10))
 
 
 def _verdict(coef: float | None, se: float | None, baseline: float | None) -> str:
@@ -162,6 +275,161 @@ def run_robustness_grid(cfg: Config) -> tuple[Path, int]:
             "adds refi intensity, pre-shock coupon level, and equity",
         )
     )
+
+    # -- alternative pre-shock dates ----------------------------------------
+    # The exposure measure is rebuilt from scratch at each date, so this genuinely
+    # varies the treatment rather than relabelling it.
+    for alt_date in ALTERNATIVE_PRE_SHOCK_DATES:
+        if alt_date == cfg.event_study.pre_shock_date:
+            continue
+        try:
+            alt_exposure, _meta = predetermined_exposure(cfg, as_of=alt_date)
+            col = cfg.event_study.exposure_measure
+            if col not in alt_exposure.columns:
+                continue
+            merged = annual.drop([c for c in annual.columns if c == "_alt_exposure"]).join(
+                alt_exposure.select("geography", pl.col(col).alias("_alt_exposure")),
+                on="geography",
+                how="left",
+            )
+            r = did_two_period(merged, headline, "_alt_exposure", "year", shock_year, controls)
+            rows.append(
+                _row(
+                    "pre_shock_date",
+                    f"exposure frozen at {alt_date}",
+                    headline,
+                    f"{col}@{alt_date}",
+                    r,
+                    base_coef,
+                    "the coupon distribution is re-frozen at a different pre-shock date; "
+                    "an estimate that depends on the date is an estimate of the date",
+                )
+            )
+        except Exception as exc:
+            rows.append(
+                _row(
+                    "pre_shock_date",
+                    f"exposure frozen at {alt_date}",
+                    headline,
+                    "n/a",
+                    {"status": "skipped", "reason": f"{type(exc).__name__}: {exc}"},
+                    base_coef,
+                    "alternative pre-shock date",
+                )
+            )
+
+    # -- alternative market-rate series -------------------------------------
+    # Exposure is the frozen coupon distribution evaluated at a national post-shock
+    # rate LEVEL, so swapping PMMS 30-year for 15-year changes that level.
+    for alt_series in cfg.rates.alternative_series:
+        try:
+            alt_cfg = load_config_like(cfg, rates_series=alt_series)
+            alt_exposure, meta = predetermined_exposure(alt_cfg)
+            col = cfg.event_study.exposure_measure
+            if col not in alt_exposure.columns:
+                continue
+            merged = annual.join(
+                alt_exposure.select("geography", pl.col(col).alias("_alt_rate_exposure")),
+                on="geography",
+                how="left",
+            )
+            r = did_two_period(merged, headline, "_alt_rate_exposure", "year", shock_year, controls)
+            rows.append(
+                _row(
+                    "market_rate_series",
+                    f"{alt_series} instead of {cfg.rates.series}",
+                    headline,
+                    f"{col}@{alt_series}",
+                    r,
+                    base_coef,
+                    f"post-shock national rate level "
+                    f"{meta['rate_shift']['post_shock_rate_level_pct']:.2f}% under "
+                    f"{alt_series}; a 15-year series implies a different gap for the "
+                    "same coupon distribution",
+                )
+            )
+        except Exception as exc:
+            rows.append(
+                _row(
+                    "market_rate_series",
+                    f"{alt_series} instead of {cfg.rates.series}",
+                    headline,
+                    "n/a",
+                    {"status": "skipped", "reason": f"{type(exc).__name__}: {exc}"},
+                    base_coef,
+                    "alternative market-rate series",
+                )
+            )
+
+    # -- alternative HPI concepts -------------------------------------------
+    # purchase-only / all-transactions / expanded-data are DIFFERENT index concepts.
+    # They are never mixed into one series; each is used to rebuild the pandemic-boom
+    # control separately.
+    for flavor in ALTERNATIVE_HPI_FLAVORS:
+        if flavor == cfg.panel.hpi_flavor:
+            continue
+        try:
+            alt_ctrl = _pre_growth_under_flavor(cfg, flavor)
+            if alt_ctrl is None:
+                continue
+            merged = annual.join(alt_ctrl, on="geography", how="left")
+            r = did_two_period(
+                merged, headline, base_exposure, "year", shock_year, ["_alt_pre_growth"]
+            )
+            rows.append(
+                _row(
+                    "hpi_concept",
+                    f"pandemic control from {flavor} HPI",
+                    headline,
+                    base_exposure,
+                    r,
+                    base_coef,
+                    f"the 2019-21 price-growth control is rebuilt from the {flavor} "
+                    "index concept rather than purchase-only; concepts are never mixed "
+                    "within a series",
+                )
+            )
+        except Exception as exc:
+            rows.append(
+                _row(
+                    "hpi_concept",
+                    f"pandemic control from {flavor} HPI",
+                    headline,
+                    base_exposure,
+                    {"status": "skipped", "reason": f"{type(exc).__name__}: {exc}"},
+                    base_coef,
+                    "alternative HPI concept",
+                )
+            )
+
+    # -- loan sub-samples: exposure rebuilt on a restricted loan population ---
+    for label, expr, why in LOAN_SUBSAMPLES:
+        try:
+            sub_exposure = _exposure_on_subsample(cfg, expr)
+            col = cfg.event_study.exposure_measure
+            if sub_exposure is None or col not in sub_exposure.columns:
+                continue
+            merged = annual.join(
+                sub_exposure.select("geography", pl.col(col).alias("_sub_exposure")),
+                on="geography",
+                how="left",
+            )
+            r = did_two_period(merged, headline, "_sub_exposure", "year", shock_year, controls)
+            rows.append(
+                _row("loan_subsample", label, headline, f"{col}|{label}", r, base_coef, why)
+            )
+        except Exception as exc:
+            rows.append(
+                _row(
+                    "loan_subsample",
+                    label,
+                    headline,
+                    "n/a",
+                    {"status": "skipped", "reason": f"{type(exc).__name__}: {exc}"},
+                    base_coef,
+                    why,
+                )
+            )
 
     # -- sample exclusions --------------------------------------------------
     if "pre_hpi_growth_2019_2021" in annual.columns:
