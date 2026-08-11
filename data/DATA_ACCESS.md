@@ -103,9 +103,25 @@ layout has not changed.
 
 **We will not bypass registration, authentication, or licence acceptance.**
 
-1. Go to `https://www.freddiemac.com/research/datasets/sf-loanlevel-dataset`.
-2. Create an account and accept the terms of use. Read them: they prohibit
-   redistribution of the loan-level records.
+1. Go to `https://www.freddiemac.com/research/datasets/sf-loanlevel-dataset`. The page
+   states: *"To access the Single-Family Loan-Level Dataset, register and sign-in to
+   **Clarity Data Intelligence**."*
+2. Register for a **Clarity Data Intelligence** account and accept the terms of use.
+   Read them: they prohibit redistribution of the loan-level records.
+
+   | | |
+   |---|---|
+   | Dataset landing page | `https://www.freddiemac.com/research/datasets/sf-loanlevel-dataset` |
+   | Download portal (SAML sign-in) | `https://claritydownload.fmapps.freddiemac.com/CRT/` |
+   | Reporting/BI portal | `https://claritybi.freddiemac.com/MicroStrategyLibrary/` |
+
+   ⚠️ **Many older guides still point at `freddiemac.embs.com`. That host now returns
+   HTTP 403 and is not the current route** (verified 2026-08-11). If a tutorial sends
+   you there, it is out of date.
+
+   The **sample files are behind the same sign-in** as the full dataset — there is no
+   unauthenticated sample download, which is why this repository ships synthetic
+   fixtures instead.
 3. Download either
    - the **official sample dataset** (`sample_YYYY.zip` files — a random 50,000-loan
      sample per origination year, with matching monthly performance), or

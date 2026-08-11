@@ -318,19 +318,31 @@ def _estimate(pf: Preflight, total_bytes: int, cfg: Config) -> dict[str, Any]:
 
 
 def registration_steps() -> list[str]:
-    """The steps only the user can perform, in order."""
+    """The steps only the user can perform, in order.
+
+    Verified against the live pages on 2026-08-11. Note that many older tutorials still
+    point at ``freddiemac.embs.com``; that host now returns HTTP 403 and is not the
+    current route.
+    """
     return [
-        "1. Open https://www.freddiemac.com/research/datasets/sf-loanlevel-dataset",
-        "2. Create an account and ACCEPT THE TERMS OF USE. Read them: they prohibit "
-        "redistributing the loan-level records. This repository will not bypass this "
-        "step and does not want a copy of your credentials.",
-        "3. Download either the official SAMPLE files (sample_YYYY.zip -- a random "
-        "50,000-loan sample per origination year, good for a first real run) or the "
-        "full quarterly cohorts (historical_data_YYYYQn.zip).",
-        "4. Put the archives UNMODIFIED in data/raw/freddie/. Do not unzip them; the "
+        "1. Open the dataset page: "
+        "https://www.freddiemac.com/research/datasets/sf-loanlevel-dataset",
+        "2. It states: 'To access the Single-Family Loan-Level Dataset, register and "
+        "sign-in to CLARITY DATA INTELLIGENCE.' That portal is the actual gate. The "
+        "download entry point is https://claritydownload.fmapps.freddiemac.com/CRT/ "
+        "(SAML sign-in). NOTE: the old freddiemac.embs.com route that older guides "
+        "cite now returns HTTP 403 -- do not follow those.",
+        "3. Register for a Clarity account and ACCEPT THE TERMS OF USE. Read them: they "
+        "prohibit redistributing the loan-level records. This repository will not "
+        "bypass this step and does not want a copy of your credentials.",
+        "4. In Clarity, download either the official SAMPLE files (sample_YYYY.zip -- a "
+        "random 50,000-loan sample per origination year; the right choice for a first "
+        "real run) or the full quarterly cohorts (historical_data_YYYYQn.zip). Both "
+        "sit behind the same sign-in.",
+        "5. Put the archives UNMODIFIED in data/raw/freddie/. Do not unzip them; the "
         "adapter reads members in place.",
-        "5. Run `make check-registered-data` -- seconds, not hours. Fix any BLOCKER.",
-        "6. Set mortgage.mode to registered_sample (or registered_full) in your config, "
+        "6. Run `make check-registered-data` -- seconds, not hours. Fix any BLOCKER.",
+        "7. Set mortgage.mode to registered_sample (or registered_full) in your config, "
         "and set mortgage.cohorts to the cohorts you actually downloaded.",
-        "7. Run `make reproduce-sample`. No code changes are needed.",
+        "8. Run `make reproduce-sample`. No code changes are needed.",
     ]
