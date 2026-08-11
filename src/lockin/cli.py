@@ -109,14 +109,15 @@ def check_registered_data(config: ConfigOpt = "configs/sample.yaml") -> None:
             )
         console.print(t)
 
-    if pf.n_blockers:
-        console.print(f"\n[bold red]{pf.n_blockers} blocker(s).[/] Do not ingest yet.")
-        raise typer.Exit(code=1)
-
+    # No files at all means the user has not completed registration yet -- which is
+    # exactly when they need the steps, so print them BEFORE the blocker summary.
     if not pf.files:
         console.print("\n[bold]Steps only you can perform:[/]")
         for step in registration_steps():
             console.print(f"  {step}")
+
+    if pf.n_blockers:
+        console.print(f"\n[bold red]{pf.n_blockers} blocker(s).[/] Do not ingest yet.")
         raise typer.Exit(code=1)
 
     console.print("\n[green]Preflight clean.[/] Set mortgage.mode and run `make reproduce-sample`.")
