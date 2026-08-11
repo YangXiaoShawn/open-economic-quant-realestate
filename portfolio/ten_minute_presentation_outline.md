@@ -86,11 +86,14 @@ is synthetic, say so before anyone sees a number, not after.
 
 ### Slide 7 — Market-level results (1 min)
 
-- Purchase originations: negative point estimate, pre-trend test passes, **but does
-  not clear conventional significance with 26 state clusters.**
-- Say the sentence: *"A negative point estimate that isn't significant is not
-  evidence of an effect — and it isn't evidence against one either."*
-- Prices and permits: reported with their tiers. **No assumed sign.**
+- Purchase originations: pre-trend passes, and the estimate is **essentially zero**
+  (+0.001, s.e. 0.019, t = 0.05). A genuine null, not a negative-but-noisy result.
+- Say the sentence: *"With 26 clusters and time fixed effects absorbing the common
+  shock, this design has limited power — so this is a null result, not a refutation."*
+- **One placebo outcome fails.** The denial rate moves with t = −1.9, which counts
+  against the design rather than for it. Report it; don't bury it.
+- Prices and single-family permits: **pre-trends fail**, so both are auto-demoted to
+  descriptive and carry no causal language. **No assumed sign anywhere.**
 - The tier is assigned by the code from the diagnostics, not by me. A failed pre-trend
   auto-demotes to descriptive with no override.
 

@@ -182,12 +182,18 @@ out of this design.
 ## §7 · Market-level results, robustness, falsification — 4 min
 
 - **Purchase originations** (the headline; refi outcomes are mechanically contaminated
-  by pipeline exhaustion in high-exposure markets): negative point estimate, pre-trend
-  passes, **does not clear conventional significance at 26 state clusters**. Wild-cluster
+  by pipeline exhaustion in high-exposure markets): pre-trend passes (p = 0.34) and the
+  estimate is **+0.001, s.e. 0.019, t = 0.05** — a precise-looking zero. Wild-cluster
   bootstrap reported alongside the asymptotic test.
-- Say it plainly: a negative point estimate that isn't significant is not evidence of
-  an effect, and it isn't evidence against one either.
-- **Prices and permits:** reported with tiers; no assumed sign.
+- Say it plainly: **this is a null result.** With 26 state clusters, annual HMDA data,
+  and time fixed effects absorbing the common national shock, the design has limited
+  power to detect a cross-state differential — so a null is not a refutation of
+  lock-in, but it is also not suggestive evidence for it.
+- **A placebo outcome fails.** The mortgage denial rate moves with t = −1.9. A
+  significant placebo counts against the design. It is reported in the grid and in
+  `reports/failed_hypotheses.md`, not buried.
+- **Prices and single-family permits:** pre-trends **fail** (p = 0.003 and p = 0.007),
+  so both are auto-demoted to descriptive. No assumed sign.
 - **Robustness grid:** exposure definitions, bp thresholds, count vs UPB weighting,
   control sets, exclusion of pandemic-boom and high-refi markets, HMDA coverage
   regimes, panel balance, placebo shock dates, placebo outcomes. Each cell gets a
@@ -289,8 +295,8 @@ pandemic price booms, and those markets mean-reverted in 2022–23 for reasons u
 to lock-in. We control for 2019–21 price growth, exclude top-decile boom markets as a
 robustness cell, and refuse IV language.
 
-**"Your loan-level effect is large and your market-level effect isn't significant.
-Doesn't that undermine the story?"**
+**"Your loan-level effect is large and your market-level effect is zero. Doesn't that
+undermine the story?"**
 They are different objects. The loan-level result is a within-borrower association
 between the gap and payoff, in a design with hundreds of thousands of loan-months. The
 market-level result asks whether *cross-state differences* in exposure predict

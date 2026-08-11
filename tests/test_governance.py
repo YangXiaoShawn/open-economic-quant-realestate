@@ -75,6 +75,14 @@ FORBIDDEN_PATTERNS = (
 )
 
 #: Files that legitimately discuss the forbidden phrases in order to forbid them.
+#:
+#: A regex cannot tell "a prepayment is a sale" from "never say a prepayment is a
+#: sale" -- negation and quotation are beyond its reach. So the guard is deliberately
+#: over-sensitive and this allowlist carries the files whose *purpose* includes stating
+#: the rule. Adding a file here is a real decision: it means nobody will catch a
+#: genuine slip in that file automatically. Every entry below is a document about the
+#: vocabulary rule, a schema/event module that must name what it refuses to emit, or a
+#: renderer that emits the warning text.
 ALLOWLIST = {
     "AGENTS.md",
     "README.md",
@@ -91,6 +99,11 @@ ALLOWLIST = {
     "src/lockin/simulate/scenarios.py",
     "src/lockin/benchmark.py",
     "data/DATA_DICTIONARY.md",
+    # Portfolio documents whose "what not to say" sections quote the rule verbatim.
+    "portfolio/interview_story.md",
+    "portfolio/ten_minute_presentation_outline.md",
+    "portfolio/thirty_minute_research_presentation.md",
+    "portfolio/resume_bullets.md",
 }
 
 

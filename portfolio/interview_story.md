@@ -45,11 +45,16 @@ The honest answer, and it is a better answer than a number:
 > borrower chose and the national rate path, and a borrower with a 2.8% coupon in
 > 2023 differs from one with a 6.8% coupon in cohort, credit, equity, and tenure.
 >
-> **At the market level the point estimate on purchase originations is negative and
-> consistent with the mechanism, but with 26 state clusters it doesn't clear
-> conventional significance.** I report that as what it is. A negative point estimate
-> that isn't significant is not evidence of an effect — and it isn't evidence against
-> one either.
+> **At the market level I find essentially nothing.** The estimate on log purchase
+> originations is +0.001 with a standard error of 0.019 — a t-statistic of 0.05. Not
+> negative-but-noisy. Zero. And one of my placebo outcomes, the mortgage denial rate,
+> moves with a t of −1.9, which counts *against* the design rather than for it.
+>
+> I want to be precise about what that does and doesn't mean. With 26 state clusters,
+> annual HMDA data, and time fixed effects absorbing the common national shock, this
+> design has limited power to detect a cross-state differential. So it is a genuine
+> null, not a refutation of lock-in — but I'm not going to dress it up as suggestive
+> evidence either.
 >
 > And one caveat I'd flag before you ask: the current run uses synthetic fixtures,
 > because the Freddie Mac loan-level data are behind a registration wall I didn't
@@ -97,7 +102,7 @@ work has no visible errors. Five, with the diagnostic that caught each:
 > that caught it — an exposure-distribution artifact computed and inspected before any
 > event study is interpreted — is now a permanent step."
 
-**2. An API that silently ignored a filter.**
+**2. An API that silently ignored a filter — and it changed my headline result.**
 > "The CFPB HMDA Data Browser takes `loan_purposes`, plural. I passed the singular.
 > It didn't error — it dropped the parameter and returned **all-purpose** totals. So
 > my 'purchase originations' and 'refinance originations' were byte-identical, both

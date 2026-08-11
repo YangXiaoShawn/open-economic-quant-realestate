@@ -224,3 +224,65 @@ demoted to descriptive. The panel now spans the union of outcome years with the
 geography-level frozen exposure attached to pre-shock years too; stock aggregates
 are null there and `has_stock_data` flags which rows have them. Partial permit
 years are dropped rather than compared against full-year totals.
+
+### 2026-08-11 · D020 · The HMDA filter bug changed the headline result **[AUTO]**
+Recorded separately from D017 because the *consequence* matters independently of the
+cause. Before the `loan_purposes` fix, the pre/post DiD on "log purchase originations"
+was **−0.026** (s.e. 0.038). After the fix — with genuine purchase-only counts rather
+than all-purpose totals compared against themselves — it is **+0.001** (s.e. 0.019,
+t = 0.05).
+
+So the corrected market-level finding is a **null**, not a negative-but-noisy estimate.
+Had the bug survived, this project would have reported a negative coefficient that was
+an artifact of a silently dropped query parameter.
+
+Three consequences applied:
+1. `reports/` are generated, so they picked up the corrected numbers automatically.
+   The hand-written `portfolio/` documents did **not**, and were corrected by hand.
+2. The null is reported as a null. With 26 state clusters, annual HMDA data, and time
+   fixed effects absorbing the common national shock, this design has limited power to
+   detect a cross-state differential — so a null is not a refutation of lock-in, but it
+   is also not suggestive evidence for it.
+3. **A placebo outcome fails.** The purchase denial rate moves with t = −1.90. A
+   significant placebo counts *against* the design, and the robustness grid flags it as
+   `placebo_FAIL`. It is surfaced in `reports/failed_hypotheses.md` rather than buried.
+
+Also recorded: `es_hpi_growth` (pre-trend p = 0.003) and `es_log_permits_1unit`
+(p = 0.007) **fail** their pre-trend tests and are auto-demoted to `descriptive` by the
+tier logic, with no manual override available.
+
+### 2026-08-11 · D021 · Empty loan-age bins broke the cluster-robust covariance **[AUTO]**
+Three loan-age dummies (`age_60_84`, `age_84_120`, `age_120_360`) had no observations
+in the estimation window, leaving the design matrix rank 14 of 17 columns. A plain GLM
+fit tolerates that via a pseudo-inverse, but the cluster-robust sandwich inverts X'X
+exactly and failed with a singular matrix — silently downgrading the standard errors to
+conventional ones, which are badly understated when loan-months are serially correlated
+within a loan. `design_matrix` now drops zero-variance columns and records them in
+`dropped_design_columns`. Standard errors are now clustered by loan across 10,320
+clusters.
+
+Related: `lifelines` cannot compute Schoenfeld residuals for a left-truncated fit, so
+the proportional-hazards diagnostic runs on a **separate** Cox fit without entry times,
+labeled as such in the artifact. That diagnostic reports a large PH violation for
+`rate_gap_at_entry` (p < 0.0001) — expected, since the entry gap becomes a worse proxy
+for the current gap as the loan ages, and precisely why the discrete-time rungs with a
+time-varying gap are the preferred specifications.
+
+### 2026-08-11 · D022 · Generated fixtures are not committed **[AUTO]**
+The synthetic performance files are ~32 MB and are deterministic from
+`mortgage.synthetic_seed`, so they are regenerable with `make prepare-sample-data` and
+are gitignored. Their **manifest is committed**, so the exact fixture set behind any
+result stays auditable. A governance test enforces a 5 MB ceiling on tracked files.
+
+### 2026-08-11 · D023 · mypy: strict core, relaxed analysis modules **[AUTO]**
+The seven core-interface modules (`amortization`, `lockin_measures`, `config`,
+`provenance`, `manifest`, `schemas.*`, `adapters.base`) typecheck strictly and cleanly.
+The analysis modules disable `arg-type`, `operator`, `str-bytes-safe`, `assignment`, and
+`index`, because Polars declares accessors such as `Series.max()` and `DataFrame.item()`
+as wide unions whose runtime type depends on a column dtype mypy cannot see. Every
+flagged site was a `float()`/`int()` on a column we constructed as numeric. Narrowing
+each with a cast would add dozens of casts asserting what the schema already guarantees
+and would hide genuine errors in the noise. Two *genuine* typing defects were found and
+fixed rather than suppressed: a dict typed `dict[str, dict]` that also held a string,
+and `write_loan_events` returning `tuple[object, ...]` which erased structure at every
+call site.

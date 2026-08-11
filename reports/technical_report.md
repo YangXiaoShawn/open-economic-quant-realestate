@@ -6,8 +6,8 @@
 
 | | |
 |---|---|
-| Generated | `2026-08-11T05:51:42+00:00` |
-| Git commit | `no-commit` |
+| Generated | `2026-08-11T05:53:38+00:00` |
+| Git commit | `cf5d41526477` |
 | Config | `sample` (digest `9fb71e2454f98608`) |
 | Data class | **SYNTHETIC** |
 | Data period | `2021-01..2024-12` |
@@ -128,9 +128,9 @@ Every outcome, its dynamic path, pre-trends, and placebos: `reports/local_market
 |---|---|
 | `insignificant` | 24 |
 | `consistent` | 4 |
-| `not_estimable` | 2 |
-| `placebo_FAIL` | 2 |
 | `placebo_pass` | 2 |
+| `placebo_FAIL` | 2 |
+| `not_estimable` | 2 |
 
 Cells vary the exposure definition, the bp threshold, the weighting (count vs UPB), the control set, sample exclusions (pandemic-boom and high-refi markets), the HMDA coverage regime, panel balance, placebo shock dates, and placebo outcomes.
 
