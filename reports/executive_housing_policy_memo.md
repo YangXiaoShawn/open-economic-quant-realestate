@@ -6,8 +6,8 @@
 
 | | |
 |---|---|
-| Generated | `2026-08-11T05:53:38+00:00` |
-| Git commit | `cf5d41526477` |
+| Generated | `2026-08-11T05:59:16+00:00` |
+| Git commit | `36593adf3972` |
 | Config | `sample` (digest `9fb71e2454f98608`) |
 | Data class | **SYNTHETIC** |
 | Data period | `2021-01..2024-12` |
