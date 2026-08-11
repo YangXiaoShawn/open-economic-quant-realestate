@@ -79,6 +79,49 @@ def verify_schema() -> None:
         console.print(f"    {k}: {v}")
 
 
+@app.command("check-registered-data")
+def check_registered_data(config: ConfigOpt = "configs/sample.yaml") -> None:
+    """Preflight the registered Freddie Mac archives BEFORE a multi-hour ingest.
+
+    Reads only the head of each member: seconds, not hours. Exits non-zero on a blocker.
+    """
+    from lockin.preflight import registration_steps, run_preflight
+
+    cfg = _cfg(config)
+    pf = run_preflight(cfg)
+
+    for f in pf.findings:
+        style = {"BLOCKER": "[bold red]x[/]", "WARNING": "[yellow]![/]", "INFO": "[dim]i[/]"}[
+            f.level
+        ]
+        console.print(f"  {style} {f.message}")
+
+    if pf.files:
+        t = Table("kind", "cohort", "fields", "expected", "probed", "source")
+        for row in pf.files:
+            t.add_row(
+                str(row["kind"]),
+                str(row["cohort"]),
+                str(row.get("modal_field_count", "?")),
+                str(row.get("expected_field_count", "?")),
+                str(row.get("lines_probed", 0)),
+                str(row["source"])[-52:],
+            )
+        console.print(t)
+
+    if pf.n_blockers:
+        console.print(f"\n[bold red]{pf.n_blockers} blocker(s).[/] Do not ingest yet.")
+        raise typer.Exit(code=1)
+
+    if not pf.files:
+        console.print("\n[bold]Steps only you can perform:[/]")
+        for step in registration_steps():
+            console.print(f"  {step}")
+        raise typer.Exit(code=1)
+
+    console.print("\n[green]Preflight clean.[/] Set mortgage.mode and run `make reproduce-sample`.")
+
+
 @app.command("emit-layout")
 def emit_layout() -> None:
     """Regenerate data/reference/freddie_llds_layout.yaml from the schema module.

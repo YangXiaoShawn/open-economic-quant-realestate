@@ -46,6 +46,9 @@ build-local-panel: ## Build geography-month active stock + local housing-market 
 validate-data: ## Run schema, coverage, and internal-consistency validation checks
 	$(RUN) lockin validate-data --config $(CONFIG)
 
+check-registered-data: ## Preflight registered Freddie Mac archives (seconds, not hours)
+	$(RUN) lockin check-registered-data --config $(CONFIG)
+
 emit-layout: ## Regenerate data/reference/freddie_llds_layout.yaml from the schema module
 	$(RUN) lockin emit-layout
 

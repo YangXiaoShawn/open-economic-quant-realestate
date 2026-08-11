@@ -111,8 +111,22 @@ layout has not changed.
      sample per origination year, with matching monthly performance), or
    - the **standard full dataset** (`historical_data_YYYYQn.zip` per quarterly cohort).
 4. Place the archives, unmodified, in `data/raw/freddie/`.
-5. Set `mortgage.mode: registered_sample` or `registered_full` in your config and
-   run `make ingest-mortgages`.
+5. **Preflight before you commit hours to it:**
+
+   ```bash
+   make check-registered-data
+   ```
+
+   This reads only the first few hundred lines of each member (seconds, not hours) and
+   answers: are these the expected files, does each parse at the verified 32-field
+   layout, are all Zero Balance Codes ones we document, do the origination and
+   performance files pair up, and roughly how much disk and time will the real run
+   need. It exits non-zero on a blocker. **A layout change or an undocumented Zero
+   Balance Code is a blocker on purpose** -- an unknown code would otherwise be
+   silently censored, discarding real exits.
+
+6. Set `mortgage.mode: registered_sample` or `registered_full` in your config, set
+   `mortgage.cohorts` to what you actually downloaded, and run `make reproduce-sample`.
 
 Expected archive contents per cohort:
 - `historical_data_YYYYQn.txt` — origination, pipe-delimited, 32 fields, no header.
@@ -129,11 +143,31 @@ empirical finding.
 
 ### R2. Optional local economic controls
 
-- BLS LAUS state unemployment: `https://download.bls.gov/pub/time.series/la/`
-  — public but BLS requires a descriptive `User-Agent`; some IP ranges are
-  rate-limited. Adapter is optional and the pipeline runs without it.
-- IRS SOI county-to-county migration: public, requires manual file selection.
-- Census ACS housing tenure / vacancy: public API, requires a free API key for
+**BLS LAUS state unemployment — IMPLEMENTED, and it needs no registration.**
+`src/lockin/adapters/bls_laus.py`. Note the route: the bulk flat files at
+`https://download.bls.gov/pub/time.series/la/` return **HTTP 403** to a generic
+client, because BLS asks automated downloaders to identify themselves with a contact
+email. **This repository will not put your personal email into an outbound header
+without being asked to**, so it uses the **public JSON API v2** instead
+(`https://api.bls.gov/publicAPI/v2/timeseries/data/`), which serves the same series
+without a registration key within published unregistered limits (~25 queries/day, 25
+series and 20 years per query). Three queries cover all 51 states.
+
+Series: `LASST{fips}0000000000003` — LAUS, State, Seasonally adjusted, measure `03` =
+unemployment rate. Fetched by `make fetch-public-data`; the pipeline runs without it
+and records its absence.
+
+*If you want the bulk-file route instead* (higher volume, no rate limit), set a
+`User-Agent` containing your own contact email — that is your decision to make, not
+this repository's.
+
+**Not yet implemented, and each leaves a documented gap:**
+
+- **Teleworkable employment share** — would address the remote-work-exposure threat in
+  `docs/IDENTIFICATION_STRATEGY.md` §3.2, currently `UNCONTROLLED` in the
+  `identification_threats` map on every event-study artifact.
+- **IRS SOI county-to-county migration** — public, but requires manual file selection.
+- **Census ACS housing tenure / vacancy** — public API; a free key is needed for
   high-volume use.
 
 The core project must run without any of these. They are `optional: true` in the
