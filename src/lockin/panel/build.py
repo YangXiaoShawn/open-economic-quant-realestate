@@ -1,0 +1,419 @@
+"""Local housing-market panel.
+
+Joins, at the geography level chosen in the config (default **state**):
+
+* **lock-in exposure** from the active mortgage stock (monthly, and the frozen
+  predetermined values),
+* **HMDA** purchase and refinance originations, applications, denials (**annual**),
+* **FHFA HPI** growth (monthly, purchase-only by default),
+* **Census BPS** authorized units (monthly).
+
+Frequency discipline: HMDA is annual and is **not** interpolated for estimation
+(``DECISION_LOG`` D015). Two panels are therefore written:
+
+* ``local_market_panel_monthly`` -- exposure, HPI growth, permits.
+* ``local_market_panel_annual``  -- the monthly variables collapsed to annual
+  means/sums, joined to HMDA. This is the panel the HMDA event studies use.
+
+State is the default geography because it is the only level where all four sources
+line up without an MSA-definition-vintage problem (``DECISION_LOG`` D007).
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import polars as pl
+
+from lockin.adapters import census_bps, fhfa_hpi, hmda
+from lockin.config import Config
+from lockin.manifest import write_manifest
+from lockin.stock import load_active_stock, predetermined_exposure
+
+STATE_FIPS_TO_ABBR: dict[int, str] = {
+    1: "AL",
+    2: "AK",
+    4: "AZ",
+    5: "AR",
+    6: "CA",
+    8: "CO",
+    9: "CT",
+    10: "DE",
+    11: "DC",
+    12: "FL",
+    13: "GA",
+    15: "HI",
+    16: "ID",
+    17: "IL",
+    18: "IN",
+    19: "IA",
+    20: "KS",
+    21: "KY",
+    22: "LA",
+    23: "ME",
+    24: "MD",
+    25: "MA",
+    26: "MI",
+    27: "MN",
+    28: "MS",
+    29: "MO",
+    30: "MT",
+    31: "NE",
+    32: "NV",
+    33: "NH",
+    34: "NJ",
+    35: "NM",
+    36: "NY",
+    37: "NC",
+    38: "ND",
+    39: "OH",
+    40: "OK",
+    41: "OR",
+    42: "PA",
+    44: "RI",
+    45: "SC",
+    46: "SD",
+    47: "TN",
+    48: "TX",
+    49: "UT",
+    50: "VT",
+    51: "VA",
+    53: "WA",
+    54: "WV",
+    55: "WI",
+    56: "WY",
+    72: "PR",
+}
+
+
+def build_local_panel(cfg: Config) -> tuple[pl.DataFrame, Path, list[str]]:
+    """Build and persist the monthly and annual local-market panels."""
+    notes: list[str] = []
+    stock = load_active_stock(cfg)
+
+    # --- HPI -----------------------------------------------------------------
+    # Growth is computed at the index's OWN published frequency (quarterly at state
+    # level for purchase-only), then expanded to monthly by holding within the
+    # quarter. The expansion is labeled in index_basis and hpi_frequency so it can
+    # never be mistaken for a published monthly series.
+    try:
+        hpi_q = fhfa_hpi.load_series(
+            cfg,
+            flavor=cfg.panel.hpi_flavor,
+            frequency=cfg.panel.hpi_frequency,
+            level="State",
+            seasonal=cfg.panel.hpi_seasonal,
+        )
+        per_year = 4 if cfg.panel.hpi_frequency == "quarterly" else 12
+        hpi_growth = fhfa_hpi.add_growth(hpi_q, horizons=(1, per_year)).select(
+            "geography",
+            "period",
+            "hpi",
+            pl.col("hpi_logdiff_1").alias("hpi_growth_period"),
+            pl.col(f"hpi_logdiff_{per_year}").alias("hpi_growth_12m"),
+            "hpi_flavor",
+            "index_basis",
+            "hpi_frequency",
+        )
+        hpi = fhfa_hpi.to_monthly(hpi_growth)
+        notes.append(
+            f"FHFA HPI: {cfg.panel.hpi_flavor}, published {cfg.panel.hpi_frequency}, "
+            f"State, basis={hpi_q['index_basis'][0]}, {hpi_q.height:,} published rows "
+            f"-> {hpi.height:,} monthly rows (level held constant within period). "
+            "Growth is computed at the PUBLISHED frequency."
+        )
+    except (FileNotFoundError, ValueError) as exc:
+        hpi = None
+        hpi_q = None
+        per_year = 4
+        notes.append(f"FHFA HPI UNAVAILABLE: {exc}")
+
+    # --- permits -------------------------------------------------------------
+    try:
+        bps = census_bps.load(cfg)
+        bps = (
+            bps.with_columns(
+                pl.col("state_fips_int")
+                .replace_strict(STATE_FIPS_TO_ABBR, default=None, return_dtype=pl.Utf8)
+                .alias("geography")
+            )
+            .select(
+                "geography",
+                "period",
+                "permits_total_units",
+                "permits_1unit",
+                "permits_2to4unit",
+                "permits_5plus",
+                "vintage",
+            )
+            .drop_nulls("geography")
+        )
+        notes.append(
+            f"Census BPS: {bps.height:,} state-months, vintages "
+            f"{sorted(set(bps['vintage'].to_list()))}"
+        )
+    except FileNotFoundError as exc:
+        bps = None
+        notes.append(f"Census BPS UNAVAILABLE: {exc}")
+
+    # --- monthly panel -------------------------------------------------------
+    monthly = stock
+    if hpi is not None:
+        monthly = monthly.join(hpi, on=["geography", "period"], how="left")
+    if bps is not None:
+        monthly = monthly.join(bps, on=["geography", "period"], how="left")
+
+    monthly = monthly.with_columns(
+        pl.col("period").dt.year().alias("year"),
+        pl.col("period").dt.month().alias("month"),
+    ).sort(["geography", "period"])
+
+    # --- HMDA (annual) -------------------------------------------------------
+    try:
+        h = hmda.load(cfg)
+        notes.append(
+            f"HMDA: {h.height:,} state-years, coverage regimes "
+            f"{sorted(set(h['coverage_regime'].to_list()))}. Counts are NOT "
+            "comparable across regimes."
+        )
+    except FileNotFoundError as exc:
+        h = None
+        notes.append(f"HMDA UNAVAILABLE: {exc}")
+
+    # --- annual panel --------------------------------------------------------
+    # The annual panel spans the OUTCOME years, not just the years for which we have
+    # an active mortgage stock. This matters: the loan performance window starts in
+    # 2021, but HMDA, HPI, and permits all reach back to 2018. Restricting the panel
+    # to stock years would leave no pre-shock periods, making pre-trends untestable
+    # and forcing every result to be demoted. Exposure is a geography-level constant
+    # and is legitimately attached to pre-shock years; the stock aggregates are
+    # simply null there, and `has_stock_data` flags which rows have them.
+    outcome_years = sorted(
+        set(cfg.panel.hmda_years)
+        | set(cfg.panel.permits_years)
+        | set(monthly["year"].unique().to_list())
+    )
+    geos = sorted(monthly["geography"].unique().to_list())
+    skeleton = pl.DataFrame(
+        {
+            "geography": [g for g in geos for _ in outcome_years],
+            "year": [y for _ in geos for y in outcome_years],
+        }
+    ).with_columns(pl.col("year").cast(pl.Int32))
+
+    stock_annual = (
+        monthly.group_by(["geography", "year"])
+        .agg(
+            pl.col("n_active_loans").mean().alias("mean_active_loans"),
+            pl.col("total_upb").mean().alias("mean_total_upb"),
+            pl.col("wavg_note_rate_upb").mean().alias("wavg_note_rate_upb"),
+            pl.col("market_rate").mean().alias("mean_market_rate"),
+            pl.col("mean_rate_gap").mean().alias("mean_rate_gap"),
+            pl.col("mean_lockin_gap").mean().alias("mean_lockin_gap"),
+            pl.col("mean_payment_gap").mean().alias("mean_payment_gap"),
+            pl.col("median_payment_gap").mean().alias("median_payment_gap"),
+            pl.col("prepayment_rate_monthly").mean().alias("mean_monthly_prepay_rate"),
+            pl.col("n_prepayments").sum().alias("n_prepayments"),
+            pl.col("n_credit_events").sum().alias("n_credit_events"),
+            pl.col("refi_incentive_share").mean().alias("refi_incentive_share"),
+            pl.col("median_est_current_ltv").mean().alias("median_est_current_ltv"),
+            *[pl.col(c).mean().alias(c) for c in monthly.columns if c.startswith("locked_share_")],
+            # HPI and permit aggregates are joined separately below, at their own
+            # full year span; aggregating them here too would produce duplicate
+            # columns whose non-suffixed version is null in every pre-stock year.
+            pl.len().alias("n_months_in_year"),
+        )
+        .sort(["geography", "year"])
+        .with_columns(pl.col("year").cast(pl.Int32))
+    )
+
+    annual = skeleton.join(stock_annual, on=["geography", "year"], how="left").with_columns(
+        pl.col("mean_active_loans").is_not_null().alias("has_stock_data")
+    )
+
+    # Outcome blocks are joined onto the skeleton directly, at their own full span.
+    if hpi is not None:
+        hpi_annual = (
+            hpi.with_columns(pl.col("period").dt.year().cast(pl.Int32).alias("year"))
+            .sort(["geography", "period"])
+            .group_by(["geography", "year"])
+            .agg(
+                pl.col("hpi").last().alias("hpi_year_end"),
+                pl.col("hpi").first().alias("hpi_year_start"),
+                pl.col("hpi_growth_12m").last().alias("hpi_growth_12m_dec"),
+            )
+        )
+        annual = annual.join(hpi_annual, on=["geography", "year"], how="left")
+    if bps is not None:
+        bps_annual = (
+            bps.with_columns(pl.col("period").dt.year().cast(pl.Int32).alias("year"))
+            .group_by(["geography", "year"])
+            .agg(
+                pl.col("permits_total_units").sum().alias("permits_total_units"),
+                pl.col("permits_1unit").sum().alias("permits_1unit"),
+                pl.col("permits_5plus").sum().alias("permits_5plus"),
+                pl.len().alias("n_permit_months_in_year"),
+            )
+            # A partial year would understate annual permits; drop incomplete years
+            # rather than compare a 4-month total against a 12-month total.
+            .filter(pl.col("n_permit_months_in_year") == 12)
+        )
+        annual = annual.join(bps_annual, on=["geography", "year"], how="left")
+    if h is not None:
+        annual = annual.join(
+            h.with_columns(pl.col("year").cast(pl.Int32)), on=["geography", "year"], how="left"
+        )
+    annual = annual.sort(["geography", "year"])
+    notes.append(
+        f"Annual panel spans outcome years {outcome_years[0]}..{outcome_years[-1]} for "
+        f"{len(geos)} geographies. Stock aggregates are null before the loan "
+        f"performance window; has_stock_data flags the rows that have them."
+    )
+
+    # Log outcomes for the event study, plus a denial rate.
+    log_cols = [
+        c
+        for c in (
+            "n_purchase_originations",
+            "n_refi_originations",
+            "permits_total_units",
+            "permits_1unit",
+            "permits_5plus",
+        )
+        if c in annual.columns
+    ]
+    annual = annual.with_columns(
+        [pl.col(c).cast(pl.Float64).log().alias(f"log_{c}") for c in log_cols]
+    )
+    if "n_purchase_denials" in annual.columns and "n_purchase_applications" in annual.columns:
+        annual = annual.with_columns(
+            (
+                pl.col("n_purchase_denials").cast(pl.Float64)
+                / pl.col("n_purchase_applications").cast(pl.Float64)
+            ).alias("denial_rate")
+        )
+    if "log_n_purchase_originations" in annual.columns:
+        annual = annual.rename({"log_n_purchase_originations": "log_purchase_originations"})
+    if "log_n_refi_originations" in annual.columns:
+        annual = annual.rename({"log_n_refi_originations": "log_refi_originations"})
+    if "hpi_year_end" in annual.columns and "hpi_year_start" in annual.columns:
+        # Within-year log change computed from the published index levels, not from a
+        # sum of expanded monthly steps (which would double-count the expansion).
+        annual = annual.with_columns(
+            (pl.col("hpi_year_end").log() - pl.col("hpi_year_start").log()).alias("hpi_growth")
+        )
+
+    # --- predetermined exposure, merged onto both panels ---------------------
+    exposure, exp_meta = predetermined_exposure(cfg)
+    exp_cols = ["geography"] + [
+        c
+        for c in exposure.columns
+        if c.startswith(("locked_share_", "coupon_share_below_", "note_rate_p"))
+        or c
+        in (
+            "mean_payment_gap",
+            "median_payment_gap",
+            "mean_lockin_gap",
+            "mean_rate_gap",
+            "wavg_note_rate_upb",
+            "wavg_note_rate_count",
+            "n_active_loans",
+            "total_upb",
+            "coupon_share_hhi",
+            "median_est_current_ltv",
+            "mean_orig_cohort_year",
+        )
+    ]
+    pre = exposure.select(exp_cols).rename({c: f"pre_{c}" for c in exp_cols if c != "geography"})
+    monthly = monthly.join(pre, on="geography", how="left")
+    annual = annual.join(pre, on="geography", how="left")
+    notes.append(
+        f"Predetermined exposure frozen at {exp_meta['as_of']} for "
+        f"{exp_meta['n_geographies']} geographies; never recomputed."
+    )
+
+    # Pre-period controls: 2019-2021 price growth and refi intensity, used as
+    # confound controls in the identification strategy.
+    if hpi is not None:
+        pre_growth = (
+            hpi.filter(pl.col("period").is_between(pl.date(2019, 1, 1), pl.date(2021, 12, 1)))
+            .sort(["geography", "period"])
+            .group_by("geography")
+            .agg(
+                (pl.col("hpi").last().log() - pl.col("hpi").first().log()).alias(
+                    "pre_hpi_growth_2019_2021"
+                )
+            )
+        )
+        monthly = monthly.join(pre_growth, on="geography", how="left")
+        annual = annual.join(pre_growth, on="geography", how="left")
+        notes.append("Pre-period control added: cumulative log HPI growth 2019-01..2021-12.")
+
+    if h is not None and "n_refi_originations" in h.columns:
+        refi_intensity = (
+            h.filter(pl.col("year").is_in([2020, 2021]))
+            .group_by("geography")
+            .agg(pl.col("n_refi_originations").sum().alias("pre_refi_count_2020_2021"))
+        )
+        monthly = monthly.join(refi_intensity, on="geography", how="left")
+        annual = annual.join(refi_intensity, on="geography", how="left")
+        notes.append("Pre-period control added: 2020-2021 HMDA refinance origination count.")
+
+    out_m = cfg.path("processed", "local_market_panel_monthly.parquet")
+    out_a = cfg.path("processed", "local_market_panel_annual.parquet")
+    out_m.parent.mkdir(parents=True, exist_ok=True)
+    monthly.write_parquet(out_m)
+    annual.write_parquet(out_a)
+
+    limitations = [
+        "Geography is state (DECISION_LOG D007): the only level where loan, HPI, "
+        "HMDA, and permit coverage align without an MSA-definition-vintage problem.",
+        "HMDA is ANNUAL and is NOT interpolated for estimation (D015). HMDA "
+        "outcomes are estimated on the annual panel only.",
+        "HMDA counts are not comparable across the 2018 rule change or the "
+        "closed-end threshold change; coverage_regime is carried through.",
+        "FHFA HPI is an index, not a property value, and mixes index concepts only "
+        "if you explicitly ask it to (we do not).",
+        "Census BPS measures permits AUTHORIZED, not starts or completions, and the "
+        "monthly 'c' vintage is preliminary.",
+        "Lock-in exposure is measured on the Freddie-acquired population only; "
+        "coverage varies across states and is carried as pre_n_active_loans.",
+        "Refinance-origination outcomes are MECHANICALLY CONTAMINATED by pipeline "
+        "exhaustion in high-exposure markets (D014); purchase originations are the "
+        "headline outcome.",
+    ]
+    for target, name, nrows in (
+        (out_m, "local_market_panel_monthly", monthly.height),
+        (out_a, "local_market_panel_annual", annual.height),
+    ):
+        write_manifest(
+            target,
+            name=name,
+            source="derived: active mortgage stock + FHFA HPI + HMDA + Census BPS",
+            source_url="n/a (derived)",
+            license_terms="Aggregate; inherits the terms of its inputs.",
+            redistribution_status="aggregate",
+            schema_version="local-panel-v1",
+            row_count=nrows,
+            geographic_level=cfg.panel.geography,
+            coverage_period=(
+                f"{monthly['period'].min()}..{monthly['period'].max()}"
+                if name.endswith("monthly")
+                else f"{annual['year'].min()}..{annual['year'].max()}"
+            ),
+            known_limitations=limitations,
+            data_class=cfg.data_class,
+            extra={
+                "notes": notes,
+                "exposure_meta": exp_meta,
+                "columns": monthly.columns if name.endswith("monthly") else annual.columns,
+            },
+        )
+    return (annual, out_a, notes)
+
+
+def load_panel(cfg: Config, frequency: str = "annual") -> pl.DataFrame:
+    p = cfg.path("processed", f"local_market_panel_{frequency}.parquet")
+    if not p.exists():
+        raise FileNotFoundError(f"{p} missing. Run `make build-local-panel`.")
+    return pl.read_parquet(p)

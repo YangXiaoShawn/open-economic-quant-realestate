@@ -1,0 +1,105 @@
+[project]
+name = "lockin"
+version = "0.1.0"
+description = "Mortgage Rate Lock-In, Housing Liquidity, and Local Market Dynamics"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+license = { text = "MIT" }
+authors = [{ name = "Repository owner" }]
+
+dependencies = [
+    "polars>=1.17",
+    "pyarrow>=18.0",
+    "duckdb>=1.1",
+    "numpy>=2.0",
+    "scipy>=1.14",
+    "pandas>=2.2",
+    "statsmodels>=0.14",
+    "scikit-learn>=1.5",
+    "lifelines>=0.29",
+    "linearmodels>=6.1",
+    "matplotlib>=3.9",
+    "requests>=2.32",
+    "pyyaml>=6.0",
+    "typer>=0.15",
+    "rich>=13.9",
+]
+
+[project.optional-dependencies]
+dashboard = ["streamlit>=1.40", "altair>=5.4"]
+dev = ["pytest>=8.3", "pytest-cov>=6.0", "ruff>=0.8", "mypy>=1.13", "types-requests", "types-PyYAML"]
+
+[project.scripts]
+lockin = "lockin.cli:app_main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/lockin"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "C4", "RUF"]
+# RUF001/RUF002: report and dashboard strings deliberately use typographic
+# characters (en dashes, middle dots, arrows) because they are rendered as Markdown.
+ignore = ["E501", "B008", "RUF005", "RUF001", "RUF002", "RUF003"]
+
+[tool.mypy]
+python_version = "3.12"
+files = ["src/lockin"]
+ignore_missing_imports = true
+warn_unused_ignores = false
+disallow_untyped_defs = false
+# Core interfaces are strictly typed; analysis code is checked loosely.
+
+[[tool.mypy.overrides]]
+module = [
+    "lockin.amortization",
+    "lockin.lockin_measures",
+    "lockin.config",
+    "lockin.provenance",
+    "lockin.manifest",
+    "lockin.schemas.*",
+    "lockin.adapters.base",
+]
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+
+# Analysis modules: Polars accessors such as `Series.max()`, `DataFrame.item()`, and
+# `Series.__getitem__` are declared as wide unions
+# (`int | float | Decimal | date | time | timedelta | str | bytes | ndarray | list`)
+# because their runtime type depends on the column's dtype, which mypy cannot see.
+# Every flagged call site is a `float(...)`/`int(...)` on a column we constructed as
+# numeric, so the union is a limitation of the stubs, not a latent bug. Narrowing each
+# one with a cast would add dozens of casts that assert what the schema already
+# guarantees and would hide genuine errors in the noise. The CORE interfaces above are
+# checked strictly and are clean.
+[[tool.mypy.overrides]]
+module = [
+    "lockin.stock",
+    "lockin.events",
+    "lockin.episodes",
+    "lockin.fixtures",
+    "lockin.validate",
+    "lockin.cli",
+    "lockin.adapters.pmms",
+    "lockin.adapters.fhfa_hpi",
+    "lockin.adapters.census_bps",
+    "lockin.panel.*",
+    "lockin.survival.*",
+]
+disable_error_code = ["arg-type", "operator", "str-bytes-safe", "assignment", "index"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --strict-markers"
+markers = [
+    "network: test requires network access to public data sources",
+    "slow: long-running test",
+]

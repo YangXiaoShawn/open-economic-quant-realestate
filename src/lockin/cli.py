@@ -1,0 +1,360 @@
+"""Command-line interface. Every Makefile target maps to a subcommand here."""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Annotated
+
+import typer
+from rich.console import Console
+from rich.table import Table
+
+from lockin.config import Config, load_config
+
+app = typer.Typer(
+    add_completion=False,
+    no_args_is_help=True,
+    help="Mortgage Rate Lock-In, Housing Liquidity, and Local Market Dynamics.",
+)
+console = Console()
+
+ConfigOpt = Annotated[str, typer.Option("--config", "-c", help="Path to a run profile YAML.")]
+
+
+def _cfg(config: str) -> Config:
+    cfg = load_config(config)
+    banner = (
+        "[bold yellow]SYNTHETIC[/] loan fixtures"
+        if cfg.data_class == "SYNTHETIC"
+        else "[bold green]REGISTERED[/] loan data"
+    )
+    console.print(f"profile [bold]{cfg.name}[/] · {banner} · config digest [dim]{cfg.digest()}[/]")
+    return cfg
+
+
+def _report_problems(label: str, problems: list[str]) -> int:
+    hard = [p for p in problems if p.startswith("HARD")]
+    soft = [p for p in problems if p.startswith("SOFT")]
+    info = [p for p in problems if p.startswith("INFO")]
+    if not problems:
+        console.print(f"  [green]✓[/] {label}: no issues")
+        return 0
+    for p in hard:
+        console.print(f"  [bold red]✗[/] {p}")
+    for p in soft:
+        console.print(f"  [yellow]![/] {p}")
+    for p in info:
+        console.print(f"  [dim]i[/] {p}")
+    return len(hard)
+
+
+# ---------------------------------------------------------------------------
+
+
+@app.command("verify-schema")
+def verify_schema() -> None:
+    """Check the encoded Freddie Mac layout against its own invariants."""
+    from lockin.schemas.freddie import (
+        ORIGINATION_FIELDS,
+        PERFORMANCE_FIELDS,
+        SCHEMA_VERSION,
+        VERIFIED_AGAINST,
+        ZERO_BALANCE_CODES,
+        assert_layout_verified,
+    )
+
+    assert_layout_verified()
+    console.print(f"[green]✓[/] schema {SCHEMA_VERSION}")
+    console.print(
+        f"  {len(ORIGINATION_FIELDS)} origination fields, "
+        f"{len(PERFORMANCE_FIELDS)} performance fields"
+    )
+    t = Table("ZB", "official label", "event class", "censored", "priority")
+    for z in sorted(ZERO_BALANCE_CODES.values(), key=lambda x: x.priority):
+        t.add_row(z.code, z.official_label, z.event_class, str(z.censoring), str(z.priority))
+    console.print(t)
+    console.print("  verified against:")
+    for k, v in VERIFIED_AGAINST.items():
+        console.print(f"    {k}: {v}")
+
+
+@app.command("fetch-public-data")
+def fetch_public_data(config: ConfigOpt = "configs/sample.yaml") -> None:
+    """Download the official public series (PMMS, FHFA HPI, HMDA, Census BPS)."""
+    from lockin.adapters import census_bps, fhfa_hpi, hmda, pmms
+
+    cfg = _cfg(config)
+    results: dict[str, str] = {}
+
+    for label, fn in (
+        ("pmms", lambda: pmms.fetch(cfg)),
+        ("fhfa_hpi", lambda: fhfa_hpi.fetch(cfg)),
+    ):
+        try:
+            coverage, rows = fn()
+            results[label] = f"ok · {rows:,} rows · {coverage}"
+        except Exception as exc:
+            results[label] = f"FAILED · {type(exc).__name__}: {exc}"
+
+    if cfg.rates.cross_check_fred:
+        try:
+            df = pmms.fetch_fred_cross_check(cfg)
+            results["fred_mortgage30us"] = f"ok · {df.height:,} rows"
+        except Exception as exc:
+            results["fred_mortgage30us"] = f"FAILED · {exc}"
+
+    try:
+        coverage, rows = census_bps.fetch(cfg)
+        results["census_bps"] = f"ok · {rows:,} rows · {coverage}"
+    except Exception as exc:
+        results["census_bps"] = f"FAILED · {type(exc).__name__}: {exc}"
+
+    try:
+        coverage, rows = hmda.fetch(cfg)
+        results["hmda"] = f"ok · {rows:,} rows · {coverage}"
+    except Exception as exc:
+        results["hmda"] = f"FAILED · {type(exc).__name__}: {exc}"
+
+    t = Table("source", "result")
+    for k, v in results.items():
+        t.add_row(k, v)
+    console.print(t)
+    if any(v.startswith("FAILED") for v in results.values()):
+        console.print("[yellow]Some sources failed. The pipeline continues with what is cached.[/]")
+
+
+@app.command("prepare-sample-data")
+def prepare_sample_data(config: ConfigOpt = "configs/sample.yaml") -> None:
+    """Generate labeled SYNTHETIC loan fixtures (no restricted data involved)."""
+    from lockin.adapters import freddie_llds, pmms
+    from lockin.fixtures import generate
+    from lockin.rates import monthly_market_rate
+
+    cfg = _cfg(config)
+    console.print(freddie_llds.availability_message(cfg))
+    if cfg.mortgage.mode != "synthetic" and freddie_llds.discover(cfg):
+        console.print("[green]Registered data present; skipping fixture generation.[/]")
+        return
+
+    rates = monthly_market_rate(pmms.load(cfg), series=cfg.rates.series)
+    summary = generate(cfg, rates)
+    console.print(
+        f"[green]✓[/] wrote {len(summary.files)} SYNTHETIC files: "
+        f"{summary.n_loans:,} loans, {summary.n_performance_rows:,} loan-months, "
+        f"cohorts {summary.cohorts}, seed {summary.seed}"
+    )
+    console.print("[yellow]These are synthetic. No number derived from them is a finding.[/]")
+
+
+@app.command("ingest-mortgages")
+def ingest_mortgages(config: ConfigOpt = "configs/sample.yaml") -> None:
+    """Parse origination and monthly performance files into partitioned Parquet."""
+    from lockin.ingest import origination, performance
+
+    cfg = _cfg(config)
+    o = origination.ingest(cfg)
+    console.print(f"[green]✓[/] origination: {sum(o.values()):,} loans {dict(o)}")
+    p = performance.ingest(cfg)
+    console.print(f"[green]✓[/] performance: {sum(p.values()):,} loan-months {dict(p)}")
+
+
+@app.command("build-loan-events")
+def build_loan_events_cmd(config: ConfigOpt = "configs/sample.yaml") -> None:
+    """Build the documented loan-event table (exits, censoring, left truncation)."""
+    from lockin.events import build_loan_events, validate_events, write_loan_events
+
+    cfg = _cfg(config)
+    events = build_loan_events(cfg)
+    hard = _report_problems("loan events", validate_events(events))
+    path, summ = write_loan_events(cfg, events)
+    console.print(f"[green]✓[/] {events.height:,} loans -> {path}")
+    t = Table("event type", "loans", "share")
+    for row in summ["by_event_type"]:
+        t.add_row(
+            str(row["event_type"]),
+            f"{int(row['n_loans']):,}",
+            f"{100 * int(row['n_loans']) / events.height:.1f}%",
+        )
+    console.print(t)
+    if hard:
+        raise typer.Exit(code=1)
+
+
+@app.command("build-lockin")
+def build_lockin_cmd(config: ConfigOpt = "configs/sample.yaml") -> None:
+    """Attach point-in-time market rates and compute all lock-in measures."""
+    from lockin.adapters import fhfa_hpi, pmms
+    from lockin.episodes import build_episodes, validate_episodes, write_episodes
+    from lockin.events import load_loan_events
+    from lockin.rates import assert_no_look_ahead, monthly_market_rate
+
+    cfg = _cfg(config)
+    rates = monthly_market_rate(pmms.load(cfg), series=cfg.rates.series)
+    assert_no_look_ahead(rates)
+    console.print(f"  point-in-time market rates: {rates.height} months, no look-ahead ✓")
+
+    try:
+        hpi_q = fhfa_hpi.load_series(
+            cfg,
+            flavor=cfg.panel.hpi_flavor,
+            frequency=cfg.panel.hpi_frequency,
+            level="State",
+            seasonal=cfg.panel.hpi_seasonal,
+        )
+        # The episode table needs a monthly index value to scale LTV. A quarterly
+        # index expanded by holding the level within the quarter is acceptable for
+        # that purpose and is labeled in index_basis; it is NEVER used as an outcome.
+        hpi = fhfa_hpi.to_monthly(hpi_q)
+        console.print(
+            f"  FHFA HPI ({cfg.panel.hpi_flavor}, {cfg.panel.hpi_frequency}, State): "
+            f"{hpi_q.height:,} rows -> {hpi.height:,} monthly rows "
+            f"(basis: {hpi['index_basis'][0]})"
+        )
+    except (FileNotFoundError, ValueError) as exc:
+        console.print(f"  [yellow]![/] HPI unavailable ({exc}); estimated LTV degrades")
+        hpi = None
+
+    events = load_loan_events(cfg)
+    lf = build_episodes(cfg, events, rates, hpi)
+    path, n = write_episodes(cfg, lf)
+    console.print(f"[green]✓[/] {n:,} loan-month episodes -> {path}")
+    hard = _report_problems("episodes", validate_episodes(cfg))
+    if hard:
+        raise typer.Exit(code=1)
+
+
+@app.command("build-local-panel")
+def build_local_panel_cmd(config: ConfigOpt = "configs/sample.yaml") -> None:
+    """Build the geography-month active stock and the local housing-market panel."""
+    from lockin.panel.build import build_local_panel
+    from lockin.stock import build_active_stock
+
+    cfg = _cfg(config)
+    stock, spath = build_active_stock(cfg)
+    console.print(
+        f"[green]✓[/] active mortgage stock: {stock.height:,} geography-months -> {spath}"
+    )
+    panel, ppath, notes = build_local_panel(cfg)
+    console.print(f"[green]✓[/] local market panel: {panel.height:,} rows -> {ppath}")
+    for n in notes:
+        console.print(f"  [dim]·[/] {n}")
+
+
+@app.command("validate-data")
+def validate_data(config: ConfigOpt = "configs/sample.yaml") -> None:
+    """Schema, coverage, checksum, and internal-consistency validation."""
+    from lockin.validate import run_all_validations
+
+    cfg = _cfg(config)
+    result = run_all_validations(cfg)
+    for section, problems in result["sections"].items():  # type: ignore[index]
+        console.print(f"[bold]{section}[/]")
+        _report_problems(section, problems)
+    console.print(
+        f"\n[bold]{result['n_hard']}[/] hard, [bold]{result['n_soft']}[/] soft, "
+        f"[bold]{result['n_info']}[/] informational"
+    )
+    if int(result["n_hard"]) > 0:  # type: ignore[arg-type]
+        raise typer.Exit(code=1)
+
+
+@app.command("estimate-hazards")
+def estimate_hazards(config: ConfigOpt = "configs/sample.yaml") -> None:
+    """KM/CIF description, discrete-time logit and cloglog, Cox, competing risks."""
+    from lockin.survival.run import run_hazard_ladder
+
+    cfg = _cfg(config)
+    written = run_hazard_ladder(cfg)
+    for name, path in written.items():
+        console.print(f"  [green]✓[/] {name} -> {path}")
+
+
+@app.command("estimate-local-effects")
+def estimate_local_effects(config: ConfigOpt = "configs/sample.yaml") -> None:
+    """Continuous-treatment event study, DiD panel, pre-trends, placebos."""
+    from lockin.panel.eventstudy import run_event_studies
+
+    cfg = _cfg(config)
+    written = run_event_studies(cfg)
+    for name, path in written.items():
+        console.print(f"  [green]✓[/] {name} -> {path}")
+
+
+@app.command("robustness")
+def robustness(config: ConfigOpt = "configs/sample.yaml") -> None:
+    """Run the robustness and falsification grid."""
+    from lockin.panel.robustness import run_robustness_grid
+
+    cfg = _cfg(config)
+    path, n_fail = run_robustness_grid(cfg)
+    console.print(f"  [green]✓[/] robustness grid -> {path} ({n_fail} cells flagged)")
+
+
+@app.command("benchmark")
+def benchmark(config: ConfigOpt = "configs/sample.yaml") -> None:
+    """Compare against published mortgage lock-in research benchmarks."""
+    from lockin.benchmark import run_benchmark
+
+    cfg = _cfg(config)
+    path = run_benchmark(cfg)
+    console.print(f"  [green]✓[/] benchmark comparison -> {path}")
+
+
+@app.command("simulate-policy")
+def simulate_policy(config: ConfigOpt = "configs/sample.yaml") -> None:
+    """Run the model-dependent policy counterfactual scenarios."""
+    from lockin.simulate.scenarios import run_scenarios
+
+    cfg = _cfg(config)
+    written = run_scenarios(cfg)
+    for name, path in written.items():
+        console.print(f"  [green]✓[/] {name} -> {path}")
+    console.print("[yellow]Scenarios are model-dependent projections, not forecasts.[/]")
+
+
+@app.command("report")
+def report(config: ConfigOpt = "configs/sample.yaml") -> None:
+    """Regenerate every report in reports/ from result artifacts."""
+    from lockin.reporting.render import render_all
+
+    cfg = _cfg(config)
+    written = render_all(cfg)
+    for p in written:
+        console.print(f"  [green]✓[/] {p}")
+
+
+@app.command("status")
+def status(config: ConfigOpt = "configs/sample.yaml") -> None:
+    """Print pipeline state: which stages have run and what they produced."""
+    from lockin.pipeline_status import pipeline_status
+
+    cfg = _cfg(config)
+    st = pipeline_status(cfg)
+    t = Table("stage", "state", "detail")
+    for row in st["stages"]:  # type: ignore[index]
+        mark = "[green]✓[/]" if row["ok"] else "[red]✗[/]"
+        t.add_row(str(row["stage"]), mark, str(row["detail"]))
+    console.print(t)
+    console.print(json.dumps({k: v for k, v in st.items() if k != "stages"}, indent=2))
+
+
+@app.command("dump-artifact")
+def dump_artifact(group: str, name: str, config: ConfigOpt = "configs/sample.yaml") -> None:
+    """Print one result artifact as JSON."""
+    from lockin.artifacts import read_artifact
+
+    cfg = load_config(config)
+    console.print_json(json.dumps(read_artifact(cfg, group, name)))
+
+
+def app_main() -> None:  # pragma: no cover - entry point
+    app()
+
+
+if __name__ == "__main__":  # pragma: no cover
+    app_main()
+
+
+def _unused(p: Path) -> None:  # pragma: no cover
+    return None

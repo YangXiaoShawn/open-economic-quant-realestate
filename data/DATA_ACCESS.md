@@ -1,0 +1,150 @@
+# Data Access
+
+Two tiers of data are used. **Tier P (public)** is downloaded automatically.
+**Tier R (registered)** requires you to register and accept terms yourself; this
+repository will not and cannot do that for you.
+
+Run `make fetch-public-data` for Tier P. Everything lands in `data/cache/` with a
+manifest, and nothing in `data/cache/` is committed.
+
+---
+
+## Tier P — public, fetched automatically
+
+### P1. Freddie Mac Primary Mortgage Market Survey (PMMS) — market mortgage rates
+
+- URL: `https://www.freddiemac.com/pmms/docs/PMMS_history.csv`
+- Contents: weekly national average offered rates. Columns `date, pmms30,
+  pmms30p, pmms15, pmms15p, pmms51, pmms51p, pmms51m, pmms51spread`.
+  `*p` = points/fees, `pmms51*` = 5/1 ARM series.
+- Coverage: 1971-04-02 onward (30-yr); 15-yr from 1991-08-30; 5/1 ARM 2005–2022.
+- **Methodology regimes we record:**
+  - `lender_survey_1971_2022` — the original survey of lenders.
+  - `application_based_2022_11+` — from 2022-11-17 Freddie Mac moved PMMS to a
+    methodology based on loan applications received from lenders; **the
+    fees/points series and the 5/1 ARM series were discontinued at the same
+    time.** Rates before and after are not produced the same way.
+  - The 1-yr ARM series was discontinued in 2015 and is not in this file.
+- Terms: Freddie Mac permits use with attribution; commercial redistribution is
+  restricted. We cache locally and never commit the file.
+- Adapter: `src/lockin/adapters/pmms.py`.
+
+### P2. FHFA House Price Indexes
+
+- URL: `https://www.fhfa.gov/hpi/download/monthly/hpi_master.csv` (~17 MB)
+- Contents: long-format panel. Columns `hpi_type, hpi_flavor, frequency, level,
+  place_name, place_id, yr, period, index_nsa, index_sa, rstderr, note`.
+- `hpi_flavor` distinguishes **index concepts** — `purchase-only`,
+  `all-transactions`, `expanded-data`. **Never mix these.** Default for this
+  project: `purchase-only`, monthly, seasonally adjusted where available.
+- `level` distinguishes geography: `USA or Census Division`, `State`, `MSA`,
+  `Puerto Rico`.
+- Terms: U.S. Government work, public domain. Cite FHFA and the release date.
+- Adapter: `src/lockin/adapters/fhfa_hpi.py`.
+
+### P3. HMDA — CFPB Data Browser aggregations API
+
+- Endpoint: `https://ffiec.cfpb.gov/v2/data-browser-api/view/aggregations`
+- Example: `?years=2022&states=WV&loan_purpose=1&actions_taken=1`
+  returns `{"aggregations":[{"count":…,"sum":…}]}` — loan **count** and dollar
+  **sum**. One call per (year, state, purpose, action) cell; responses cached.
+- `loan_purpose`: `1` = Home purchase, `31` = Refinancing, `32` = Cash-out
+  refinancing, `2` = Home improvement, `4` = Other, `5` = Not applicable.
+  (2018+ codes. Pre-2018 HMDA used `1`/`2`/`3`.)
+- `actions_taken`: `1` = Loan originated, `2` = Approved not accepted,
+  `3` = Denied, `4` = Withdrawn, `5` = File closed incomplete,
+  `6` = Purchased loan, `7`/`8` = preapproval outcomes.
+- **Coverage breaks:** the 2018 HMDA rule changed reported fields and
+  institutional coverage; the closed-end reporting threshold moved from 25 to 100
+  loans effective 2022 data (after litigation history in 2020–2022). Counts are
+  therefore not comparable across 2017/2018 or across the threshold change.
+  Adapter records `coverage_regime` per year.
+- Privacy: the public LAR is released with privacy modifications (binned/rounded
+  fields). The aggregations endpoint returns counts and sums only.
+- Terms: public. Adapter: `src/lockin/adapters/hmda.py`.
+
+### P4. Census Building Permits Survey
+
+- Monthly state file: `https://www2.census.gov/econ/bps/State/st{YYMM}c.txt`
+  (`c` = current/preliminary; `r` = revised). Annual and MSA/county files follow
+  parallel paths under `https://www2.census.gov/econ/bps/`.
+- Contents: buildings, units, and construction value by structure size
+  (1-unit, 2-units, 3-4 units, 5+ units), plus "rep" (reported-only) columns.
+  The non-`rep` columns include **imputation** for non-responding permit places;
+  the `rep` columns do not. We store both and default to the imputed series,
+  documented.
+- **Preliminary vs final:** monthly `c` files are preliminary and are revised.
+  We record which vintage was fetched.
+- Measures **permits authorized**, not starts or completions.
+- Terms: U.S. Government work, public domain.
+- Adapter: `src/lockin/adapters/census_bps.py`.
+
+### P5. Official Freddie Mac dataset documentation (public)
+
+- `https://www.freddiemac.com/fmac-resources/research/pdf/user_guide.pdf`
+- `https://www.freddiemac.com/fmac-resources/research/pdf/file_layout.xlsx`
+
+These two are publicly downloadable without registration and are the source of
+truth for the schema in `src/lockin/schemas/freddie.py`. The **data** files are
+not. Re-run `lockin verify-schema` after any Freddie Mac release to confirm the
+layout has not changed.
+
+### P6. Optional cross-check: FRED
+
+- `https://fred.stlouisfed.org/graph/fredgraph.csv?id=MORTGAGE30US`
+- The St. Louis Fed's redistribution of PMMS 30-yr FRM. Used only as an
+  independent cross-check on P1, not as a substitute.
+
+---
+
+## Tier R — registered; you must do this yourself
+
+### R1. Freddie Mac Single-Family Loan-Level Dataset
+
+**We will not bypass registration, authentication, or licence acceptance.**
+
+1. Go to `https://www.freddiemac.com/research/datasets/sf-loanlevel-dataset`.
+2. Create an account and accept the terms of use. Read them: they prohibit
+   redistribution of the loan-level records.
+3. Download either
+   - the **official sample dataset** (`sample_YYYY.zip` files — a random 50,000-loan
+     sample per origination year, with matching monthly performance), or
+   - the **standard full dataset** (`historical_data_YYYYQn.zip` per quarterly cohort).
+4. Place the archives, unmodified, in `data/raw/freddie/`.
+5. Set `mortgage.mode: registered_sample` or `registered_full` in your config and
+   run `make ingest-mortgages`.
+
+Expected archive contents per cohort:
+- `historical_data_YYYYQn.txt` — origination, pipe-delimited, 32 fields, no header.
+- `historical_data_time_YYYYQn.txt` — monthly performance, pipe-delimited, 32
+  fields, no header.
+
+Sizes: the full dataset is tens of GB decompressed and billions of loan-months.
+The ingestion is streaming and per-cohort; see `docs/PROJECT_PLAN.md` §4.4.
+
+**Until you complete R1, the pipeline runs on labeled synthetic fixtures**
+(`data/fixtures/`, generated by `make prepare-sample-data`). Every artifact and
+report produced in that mode is stamped `SYNTHETIC` and must not be read as an
+empirical finding.
+
+### R2. Optional local economic controls
+
+- BLS LAUS state unemployment: `https://download.bls.gov/pub/time.series/la/`
+  — public but BLS requires a descriptive `User-Agent`; some IP ranges are
+  rate-limited. Adapter is optional and the pipeline runs without it.
+- IRS SOI county-to-county migration: public, requires manual file selection.
+- Census ACS housing tenure / vacancy: public API, requires a free API key for
+  high-volume use.
+
+The core project must run without any of these. They are `optional: true` in the
+config.
+
+---
+
+## Reproducibility contract
+
+Every fetch writes `data/cache/<source>/<name>.manifest.json` containing source
+URL, retrieval timestamp, release date where discoverable, coverage period,
+licence/terms, redistribution status, schema version, row count, SHA-256
+checksum, geographic level, and known limitations. `make validate-data` fails if
+a manifest is missing or its checksum does not match.
