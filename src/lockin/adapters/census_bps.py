@@ -193,3 +193,188 @@ def load(cfg: Config) -> pl.DataFrame:
         pl.col("u5p_units").alias("permits_5plus"),
         pl.col("state_fips").cast(pl.Int64).alias("state_fips_int"),
     ).sort(["state_fips", "period"])
+
+
+# --- metropolitan geography ---------------------------------------------------
+#
+# The Census Bureau split its metro series at January 2024, into
+# ``Metro (ending 2023)/ma{YYMM}{v}.txt`` and
+# ``CBSA (beginning Jan 2024)/cbsa{YYMM}{v}.txt``. The split is not cosmetic: the 2024+
+# files are delineated on the **2023 OMB bulletin** -- Chicago loses its Wisconsin county
+# and Atlanta is renamed -- which is the same delineation change, in the same year, that
+# HMDA makes (``DECISION_LOG`` D036, D037).
+#
+# **BPS reports the parent CBSA, not Metropolitan Divisions** -- the opposite of HMDA,
+# which returns zero for a parent and only answers on divisions. Chicago appears here as
+# 16980, New York as 35620, Los Angeles as 31080. Both sources are therefore keyed to the
+# parent CBSA in this project so they join on a common unit; the difference is absorbed
+# in the adapters rather than left for the panel builder to discover.
+
+_METRO_BASE = "https://www2.census.gov/econ/bps/Metro%20(ending%202023)"
+_CBSA_BASE = "https://www2.census.gov/econ/bps/CBSA%20(beginning%20Jan%202024)"
+
+#: First year published under the CBSA (2023-delineation) directory.
+CBSA_DIRECTORY_FIRST_YEAR: int = 2024
+
+#: The metro files carry CSA and CBSA codes where the state file carries FIPS/region.
+#: Field 4 is ``MONCOV`` in the pre-2024 files and ``HHEADER`` in the 2024+ files; it is
+#: read positionally and kept unparsed, since neither is used here.
+METRO_COLUMNS = ["date_raw", "csa_code", "cbsa_code", "_flag", "cbsa_name"] + [
+    f"{b}_{m}" for b in _BLOCKS for m in _METRICS
+]
+
+
+def _metro_url(year: int, month: int, vintage: str) -> str:
+    if year >= CBSA_DIRECTORY_FIRST_YEAR:
+        return f"{_CBSA_BASE}/cbsa{year % 100:02d}{month:02d}{vintage}.txt"
+    return f"{_METRO_BASE}/ma{year % 100:02d}{month:02d}{vintage}.txt"
+
+
+def _parse_metro(text: str) -> pl.DataFrame:
+    """Parse one monthly metro/CBSA file.
+
+    Data rows are identified by a leading YYYYMM, which skips the two header rows and the
+    blank line between them without depending on how many there happen to be.
+    """
+    lines = [ln for ln in text.splitlines() if ln.strip()]
+    body = [ln for ln in lines if ln.split(",")[0].strip().isdigit()]
+    if not body:
+        raise ValueError("no data rows found in BPS metro file")
+    raw = pl.read_csv(
+        io.StringIO("\n".join(body)),
+        has_header=False,
+        infer_schema_length=0,
+        truncate_ragged_lines=True,
+    )
+    ncols = min(raw.width, len(METRO_COLUMNS))
+    raw = raw.select(raw.columns[:ncols])
+    raw.columns = METRO_COLUMNS[:ncols]
+    num_cols = [c for c in raw.columns if c not in ("date_raw", "cbsa_name", "cbsa_code", "_flag")]
+    return raw.with_columns(
+        [pl.col(c).str.strip_chars().cast(pl.Int64, strict=False).alias(c) for c in num_cols]
+        + [
+            pl.col("cbsa_name").str.strip_chars().alias("cbsa_name"),
+            # Kept as text: a CBSA code is an identifier, and casting it to an integer
+            # would drop the leading zero that some codes carry in other Census files.
+            pl.col("cbsa_code").str.strip_chars().alias("cbsa_code"),
+        ]
+    )
+
+
+METRO_FILENAME = "bps_metro_monthly.parquet"
+
+
+def fetch_metro(
+    cfg: Config,
+    years: list[int] | None = None,
+    max_age_days: int = 30,
+    vintages_to_try: tuple[str, ...] = ("c",),
+    max_workers: int = 6,
+) -> tuple[str, int]:
+    """Fetch the monthly metropolitan permit files and write a combined parquet."""
+    years = years or cfg.panel.permits_years
+    jobs = [(y, m) for y in years for m in range(1, 13)]
+    frames: list[pl.DataFrame] = []
+    misses: list[str] = []
+
+    def one(y: int, m: int) -> pl.DataFrame | None:
+        for v in vintages_to_try:
+            target = cache_path(cfg, "census_bps", f"metro_{y}{m:02d}{v}.txt")
+            try:
+                path, _ = download(
+                    cfg, (_metro_url(y, m, v),), target, max_age_days=max_age_days, min_bytes=512
+                )
+            except Exception:
+                continue
+            try:
+                df = _parse_metro(path.read_text(errors="replace"))
+            except ValueError:
+                continue
+            return df.with_columns(
+                pl.lit(y).alias("year"), pl.lit(m).alias("month"), pl.lit(v).alias("vintage")
+            )
+        return None
+
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        futures = {pool.submit(one, y, m): (y, m) for y, m in jobs}
+        for fut in as_completed(futures):
+            y, m = futures[fut]
+            try:
+                df = fut.result()
+            except Exception as exc:
+                misses.append(f"{y}-{m:02d}: {type(exc).__name__}")
+                continue
+            if df is None:
+                misses.append(f"{y}-{m:02d}: unavailable")
+            else:
+                frames.append(df)
+
+    if not frames:
+        raise ValueError(f"no BPS metro months could be fetched. Misses: {misses[:6]}")
+
+    df = (
+        pl.concat(frames, how="diagonal_relaxed")
+        .with_columns(pl.date(pl.col("year"), pl.col("month"), 1).alias("period"))
+        .rename({"cbsa_code": "geography"})
+        .sort(["geography", "period"])
+    )
+    out = cache_path(cfg, "census_bps", METRO_FILENAME)
+    df.write_parquet(out)
+    coverage = f"{df['period'].min()}..{df['period'].max()}"
+    write_manifest(
+        out,
+        name=f"{SPEC.name}_metro",
+        source=SPEC.source,
+        source_url=f"{_METRO_BASE}/ ; {_CBSA_BASE}/",
+        license_terms=SPEC.license_terms,
+        redistribution_status=SPEC.redistribution_status,
+        schema_version="census-bps-metro-monthly-v1",
+        row_count=df.height,
+        geographic_level="CBSA (parent, NOT Metropolitan Division)",
+        coverage_period=coverage,
+        known_limitations=[
+            *SPEC.known_limitations,
+            "The series is published in two directories split at January 2024, and the "
+            "2024+ files are delineated on the 2023 OMB bulletin while earlier files are "
+            "not. A CBSA's counties can therefore change mid-panel -- Chicago loses a "
+            "Wisconsin county at that boundary. Use lockin.adapters.omb_cbsa stability "
+            "verdicts to decide which codes are comparable across it.",
+            "BPS reports the PARENT CBSA and never a Metropolitan Division, unlike HMDA "
+            "which reports divisions and returns zero for the parent. Both are keyed to "
+            "the parent CBSA in this project.",
+            "Metro coverage is permit-issuing places within the CBSA, so a metro's total "
+            "is not the sum of its counties' true construction.",
+        ],
+        data_class="PUBLIC",
+        extra={
+            "n_geographies": df["geography"].n_unique(),
+            "n_months": df["period"].n_unique(),
+            "months_missing": len(misses),
+            "delineation_note": (
+                "files from 2024 onward use the 2023 OMB delineation; earlier files do not"
+            ),
+        },
+    )
+    return (coverage, df.height)
+
+
+def load_metro(cfg: Config) -> pl.DataFrame:
+    """Load the cached metropolitan permit panel, named like the state one."""
+    p = cache_path(cfg, "census_bps", METRO_FILENAME)
+    if not p.exists():
+        raise FileNotFoundError(f"BPS metro panel not cached at {p}. Run fetch_metro.")
+    df = pl.read_parquet(p)
+    return df.select(
+        "geography",
+        "period",
+        "vintage",
+        pl.col("u1_units").alias("permits_1unit"),
+        pl.col("u2_units").alias("permits_2to4unit"),
+        pl.col("u5p_units").alias("permits_5plus"),
+        (
+            pl.col("u1_units").fill_null(0)
+            + pl.col("u2_units").fill_null(0)
+            + pl.col("u34_units").fill_null(0)
+            + pl.col("u5p_units").fill_null(0)
+        ).alias("permits_total_units"),
+    ).sort(["geography", "period"])

@@ -743,3 +743,30 @@ metropolitan area with zero purchase originations in a year is a failed lookup, 
 observation, so more than 5% empty in **any single year** raises. The check is per-year
 on purpose: a wrong vintage boundary breaks exactly one span, and pooling across years
 would dilute a total failure in 2024 below any sensible threshold.
+
+### 2026-08-13 · D038 · Metropolitan permits, and the mirror image of the HMDA trap **[AUTO]**
+`census_bps.fetch_metro` adds the Building Permits Survey at metropolitan geography.
+
+Two things had to be checked rather than assumed, and both turned out to matter.
+
+**The series is published in two directories, split at January 2024.**
+`Metro (ending 2023)/ma{YYMM}{v}.txt` and `CBSA (beginning Jan 2024)/cbsa{YYMM}{v}.txt`.
+The split is not cosmetic: the 2024+ files are delineated on the **2023 OMB bulletin** —
+Chicago is "Chicago-Naperville-Elgin **IL-IN**" there against "IL-IN-**WI**" before, and
+Atlanta is renamed. **That is the same delineation change, in the same year, that HMDA
+makes** (D037). Two independent federal series moving together is a useful cross-check on
+the empirically-derived HMDA year mapping, which was established from a different kind of
+evidence entirely.
+
+**BPS reports the parent CBSA and never a Metropolitan Division — the exact opposite of
+HMDA.** Chicago is `16980` here, New York `35620`, Los Angeles `31080`: the very codes
+that return a silent zero from the HMDA API. Had both adapters been written on the
+assumption that "MSA code" means one thing, the panel would have joined divisions to
+parents under a shared column name and nobody would have seen it.
+
+Both adapters therefore key to the **parent CBSA**, and the difference is absorbed inside
+each adapter rather than left for the panel builder to trip over. HMDA carries
+`report_code` alongside so what was actually queried stays auditable.
+
+Verified live on 2022: 384 metros, 12 months, and permit counts that behave the way the
+places do — Atlanta 25,961 single-family units against Chicago's 8,020.
