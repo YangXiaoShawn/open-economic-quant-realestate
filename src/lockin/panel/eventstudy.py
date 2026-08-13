@@ -129,6 +129,64 @@ def _wild_cluster_bootstrap_p(
     return (count + 1) / (valid + 1) if valid else None
 
 
+#: Which published series each panel column is derived from. Two columns sharing a
+#: source cannot be treated as independent information about each other.
+_SERIES_SOURCE: dict[str, str] = {
+    "hpi_growth": "fhfa_hpi",
+    "hpi_growth_12m": "fhfa_hpi",
+    "pre_hpi_growth_2019_2021": "fhfa_hpi",
+    "log_purchase_originations": "hmda",
+    "log_refi_originations": "hmda",
+    "denial_rate": "hmda",
+    "pre_refi_count_2020_2021": "hmda",
+    "log_permits_1unit": "census_bps",
+    "log_permits_5plus": "census_bps",
+    "permits_1unit": "census_bps",
+    "permits_5plus": "census_bps",
+    "unemployment_rate": "bls_laus",
+    "teleworkable_share": "dingel_neiman",
+}
+
+
+def _circular_trend_controls(outcome: str, trend_controls: list[str]) -> list[str]:
+    """Trend controls drawn from the same published series as the outcome.
+
+    Interacting a pre-period value of the outcome's own series with every period makes
+    the pre-trend test unfalsifiable: the control spans the pre-period variation the
+    test looks for. Returning a non-empty list means the test result must be discarded,
+    not celebrated.
+    """
+    src = _SERIES_SOURCE.get(outcome)
+    if src is None:
+        return []
+    return [c for c in trend_controls if _SERIES_SOURCE.get(c) == src]
+
+
+def _demote_degenerate_controls(
+    df: pl.DataFrame, controls: list[str], trend_controls: list[str]
+) -> list[str]:
+    """Move level controls with no within-geography variation to the trend set.
+
+    Such a control is exactly collinear with the geography fixed effects. Nothing
+    raises -- the pseudo-inverse just splits the coefficient arbitrarily -- so without
+    this the artifact would list a control that constrains no estimate.
+
+    Shared by :func:`event_study` and :func:`did_two_period` so the two halves of one
+    artifact cannot end up estimating different specifications. Mutates both lists in
+    place and returns the names that moved.
+    """
+    degenerate: list[str] = []
+    for c in list(controls):
+        sds = df.group_by("geography").agg(pl.col(c).cast(pl.Float64).std().alias("sd"))["sd"]
+        within_sd = sds.fill_null(0.0).max()
+        if within_sd is None or float(within_sd) < 1e-12:
+            degenerate.append(c)
+            controls.remove(c)
+            if c not in trend_controls:
+                trend_controls.append(c)
+    return degenerate
+
+
 def event_study(
     panel: pl.DataFrame,
     outcome: str,
@@ -137,10 +195,27 @@ def event_study(
     reference_time: int | float,
     controls: list[str] | None = None,
     seed: int = 20260810,
+    trend_controls: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Estimate the continuous-treatment event study for one outcome."""
+    """Estimate the continuous-treatment event study for one outcome.
+
+    ``controls`` enter as ordinary level regressors. That is only meaningful for a
+    *time-varying* covariate: a geography attribute that never changes is **exactly
+    collinear with the geography fixed effects**. Nothing raises when that happens --
+    the pseudo-inverse simply splits the coefficient arbitrarily between the control and
+    the fixed effects -- so the artifact would claim a control that constrains nothing.
+    Such controls are detected here, excluded, and reported under
+    ``degenerate_controls`` rather than left to fail silently.
+
+    ``trend_controls`` are for exactly that case. Each is interacted with every period
+    indicator, parallel to the exposure itself, so a predetermined characteristic is
+    allowed its own arbitrary time path and the exposure coefficient is identified off
+    variation orthogonal to it. This is how the teleworkable share addresses the
+    remote-work threat -- see ``lockin.adapters.teleworkable``.
+    """
     controls = [c for c in (controls or []) if c in panel.columns]
-    needed = [outcome, exposure, time_col, "geography", *controls]
+    trend_controls = [c for c in (trend_controls or []) if c in panel.columns]
+    needed = [outcome, exposure, time_col, "geography", *controls, *trend_controls]
     df = panel.select(needed).drop_nulls([outcome, exposure, time_col])
     if df.height == 0:
         return {"status": "skipped", "reason": f"no non-null rows for {outcome} x {exposure}"}
@@ -157,6 +232,8 @@ def event_study(
     geos = sorted(df["geography"].unique().to_list())
     if len(geos) < 5:
         return {"status": "skipped", "reason": f"only {len(geos)} geographies"}
+
+    degenerate = _demote_degenerate_controls(df, controls, trend_controls)
 
     y = df[outcome].cast(pl.Float64).to_numpy()
     e_raw = df[exposure].cast(pl.Float64).to_numpy()
@@ -184,6 +261,20 @@ def event_study(
         cv = np.nan_to_num(cv, nan=float(np.nanmean(cv)) if np.isfinite(np.nanmean(cv)) else 0.0)
         cols.append(cv)
         names.append(f"control[{c}]")
+    # Trend controls: X_g interacted with every non-reference period. The reference
+    # period is omitted for the same reason it is omitted for the exposure -- with a
+    # full set of period interactions alongside period fixed effects the design is
+    # singular. Standardising keeps the interaction columns on the same scale as the
+    # exposure ones so the rank check is not tripped by units alone.
+    for c in trend_controls:
+        cv = df[c].cast(pl.Float64).to_numpy()
+        cv = np.nan_to_num(cv, nan=float(np.nanmean(cv)) if np.isfinite(np.nanmean(cv)) else 0.0)
+        cv, _, _ = _standardise(cv)
+        for tt in times:
+            if tt == reference_time:
+                continue
+            cols.append(cv * (t == tt).astype(float))
+            names.append(f"trend[{c}]_x_time[{tt}]")
 
     X = np.column_stack(cols)
     fit = _cluster_ols(y, X, names, g)
@@ -264,6 +355,23 @@ def event_study(
         "time_col": time_col,
         "reference_time": reference_time,
         "controls": controls,
+        "trend_controls": trend_controls,
+        "trend_control_note": (
+            "Trend controls enter interacted with every non-reference period, so a "
+            "predetermined geography characteristic is allowed its own time path. A "
+            "level control could not do this: with geography fixed effects it would be "
+            "collinear and would constrain nothing."
+        )
+        if trend_controls
+        else None,
+        "degenerate_controls": degenerate,
+        "degenerate_control_note": (
+            f"{degenerate} had no within-geography variation, so as level controls they "
+            "were collinear with the geography fixed effects. They were moved to trend "
+            "controls rather than silently absorbed."
+        )
+        if degenerate
+        else None,
         "fixed_effects": ["geography", time_col],
         "n_obs": fit["n_obs"],
         "n_geographies": len(geos),
@@ -289,12 +397,20 @@ def did_two_period(
     time_col: str,
     shock_time: int | float,
     controls: list[str] | None = None,
+    trend_controls: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Collapsed pre/post DiD -- one headline number per outcome."""
+    """Collapsed pre/post DiD -- one headline number per outcome.
+
+    ``trend_controls`` enter as ``X_g x post``, the two-period analogue of the full set
+    of period interactions used in :func:`event_study`. Without it a predetermined
+    characteristic cannot be controlled for at all here, because it is absorbed by the
+    geography fixed effects.
+    """
     controls = [c for c in (controls or []) if c in panel.columns]
-    df = panel.select([outcome, exposure, time_col, "geography", *controls]).drop_nulls(
-        [outcome, exposure, time_col]
-    )
+    trend_controls = [c for c in (trend_controls or []) if c in panel.columns]
+    df = panel.select(
+        [outcome, exposure, time_col, "geography", *controls, *trend_controls]
+    ).drop_nulls([outcome, exposure, time_col])
     if df.height == 0:
         return {"status": "skipped", "reason": "no rows"}
     df = df.with_columns((pl.col(time_col) >= shock_time).cast(pl.Float64).alias("post"))
@@ -307,6 +423,11 @@ def did_two_period(
     g = df["geography"].to_numpy()
     times = sorted(df[time_col].unique().to_list())
     geos = sorted(df["geography"].unique().to_list())
+
+    # Same demotion as event_study, so both halves of an artifact estimate the same
+    # specification. Without this the DiD would keep a collinear level control that the
+    # dynamic estimate had already moved to the trend set.
+    degenerate = _demote_degenerate_controls(df, controls, trend_controls)
 
     cols = [np.ones(df.height)]
     names = ["intercept"]
@@ -323,6 +444,12 @@ def did_two_period(
         cv = np.nan_to_num(cv, nan=float(np.nanmean(cv)) if np.isfinite(np.nanmean(cv)) else 0.0)
         cols.append(cv)
         names.append(f"control[{c}]")
+    for c in trend_controls:
+        cv = df[c].cast(pl.Float64).to_numpy()
+        cv = np.nan_to_num(cv, nan=float(np.nanmean(cv)) if np.isfinite(np.nanmean(cv)) else 0.0)
+        cv, _, _ = _standardise(cv)
+        cols.append(cv * post)
+        names.append(f"trend[{c}]_x_post")
 
     X = np.column_stack(cols)
     fit = _cluster_ols(y, X, names, g)
@@ -346,6 +473,8 @@ def did_two_period(
         "n_clusters": fit["n_clusters"],
         "standard_errors": fit["se_kind"],
         "controls": controls,
+        "trend_controls": trend_controls,
+        "degenerate_controls": degenerate,
     }
 
 
@@ -425,6 +554,11 @@ def run_event_studies(cfg: Config) -> dict[str, Path]:
     # optional LAUS source is absent the column is simply missing and the threat stays
     # uncontrolled, which the artifact records.
     controls = [c for c in ("pre_hpi_growth_2019_2021", "unemployment_rate") if c in annual.columns]
+    # `teleworkable_share` is a single cross-section. It CANNOT go in `controls`: with
+    # geography fixed effects it is exactly collinear and would constrain nothing while
+    # still appearing in the artifact's control list. It enters interacted with every
+    # period instead, which is what actually addresses the remote-work threat.
+    trend_controls = [c for c in ("teleworkable_share",) if c in annual.columns]
 
     # --- exposure distribution + balance ------------------------------------
     written["exposure_distribution"] = write_artifact(
@@ -460,9 +594,18 @@ def run_event_studies(cfg: Config) -> dict[str, Path]:
             "year",
             ref_year,
             controls=controls,
+            trend_controls=trend_controls,
             seed=cfg.survival.seed,
         )
-        did = did_two_period(annual, outcome, exposure, "year", shock_year, controls=controls)
+        did = did_two_period(
+            annual,
+            outcome,
+            exposure,
+            "year",
+            shock_year,
+            controls=controls,
+            trend_controls=trend_controls,
+        )
 
         # Tier is data-driven: a pre-trend failure demotes the artifact.
         tier = "quasi_experimental"
@@ -487,6 +630,22 @@ def run_event_studies(cfg: Config) -> dict[str, Path]:
                 "Refinance originations are MECHANICALLY CONTAMINATED: high-exposure "
                 "markets refinanced heavily in 2020-21 and their pipeline is "
                 "exhausted regardless of any lock-in mechanism (DECISION_LOG D014)."
+            )
+
+        # A trend control built from the SAME published series as the outcome is a
+        # lagged dependent variable interacted with time. It absorbs the very pre-trend
+        # the test is meant to detect, so a "pass" here carries no information and must
+        # not be allowed to promote the artifact. See DECISION_LOG D027.
+        circular = _circular_trend_controls(outcome, es.get("trend_controls") or [])
+        if circular and tier == "quasi_experimental":
+            tier = "descriptive"
+            caveats.insert(
+                0,
+                "PRE-TREND TEST IS UNINFORMATIVE FOR THIS OUTCOME: the trend control(s) "
+                f"{circular} are built from the same published series as {outcome!r}, so "
+                "they are a lagged dependent variable interacted with time and absorb "
+                "the pre-trend by construction. The test cannot fail here, so it is not "
+                "evidence that it passed. DEMOTED to descriptive.",
             )
 
         written[f"es_{outcome}"] = write_artifact(
@@ -545,6 +704,7 @@ def run_event_studies(cfg: Config) -> dict[str, Path]:
             "event_year",
             -1,
             controls=controls,
+            trend_controls=trend_controls,
             seed=cfg.survival.seed,
         )
         tier = "quasi_experimental"
@@ -598,6 +758,7 @@ def run_event_studies(cfg: Config) -> dict[str, Path]:
                     "year",
                     py2,
                     controls=controls,
+                    trend_controls=trend_controls,
                 ),
             }
     # --- placebo outcome: multifamily permits ------------------------------
@@ -605,7 +766,13 @@ def run_event_studies(cfg: Config) -> dict[str, Path]:
     for po in ("log_permits_5plus", "denial_rate"):
         if po in annual.columns:
             placebo_outcomes[po] = did_two_period(
-                annual, po, exposure, "year", shock_year, controls=controls
+                annual,
+                po,
+                exposure,
+                "year",
+                shock_year,
+                controls=controls,
+                trend_controls=trend_controls,
             )
 
     written["placebos"] = write_artifact(
@@ -683,7 +850,14 @@ def _threat_status(panel: pl.DataFrame) -> dict[str, str]:
             if "pre_refi_count_2020_2021" in panel.columns
             else "UNCONTROLLED"
         ),
-        "remote_work_exposure": "UNCONTROLLED -- no teleworkable-share adapter",
+        "remote_work_exposure": (
+            "CONTROLLED via the predetermined teleworkable employment share "
+            "(Dingel & Neiman 2020), entered as a TREND control -- interacted with "
+            "every period, because the measure is a single cross-section. Note this "
+            "controls for the FEASIBILITY of remote work, not its realisation."
+            if "teleworkable_share" in panel.columns
+            else "UNCONTROLLED -- optional teleworkable-share source unavailable"
+        ),
         "national_monetary_policy_endogeneity": (
             "ABSORBED by period fixed effects; only relative effects are identified"
         ),

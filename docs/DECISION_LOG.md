@@ -367,3 +367,115 @@ specification.
 Still not covered, and recorded as such: alternative **geography** (MSA needs a
 versioned OMB crosswalk) and **stable-servicer samples** (servicer names below 1% of
 quarterly UPB are collapsed to "Other", so the sample is not constructible as intended).
+
+### 2026-08-13 · D027 · Teleworkable share added, and it exposed two specification bugs **[AUTO]**
+`lockin.adapters.teleworkable` fetches the Dingel & Neiman (2020) teleworkable
+employment share (public replication outputs, no registration) at state and CBSA level.
+This closes the last threat that was recorded as `UNCONTROLLED` on every event-study
+artifact: remote-work reallocation of housing demand.
+
+**Which of the four published measures.** The default is `teleworkable_emp`, not
+`teleworkable_manual_emp`. The `manual` pair is the authors' own subjective
+classification (`Teleworkable_BNJDopinion.csv` in their package); the unprefixed pair
+applies a fixed rule to O*NET survey responses. A control a sceptical reader can rebuild
+beats one that encodes expert judgement. The first draft of this adapter had it
+backwards and asserted in a docstring that `manual` was the paper's headline; the claim
+was checked against the authors' README and corrected. All four measures are retained
+so the choice is a robustness axis rather than an assertion.
+
+**Bug 1 — a control that was never doing anything.** The measure is a single
+cross-section, so as a level control it is exactly collinear with the geography fixed
+effects. Nothing raises: the pseudo-inverse simply splits the coefficient arbitrarily.
+Adding the diagnostic for this revealed that **`pre_hpi_growth_2019_2021` had the same
+problem and had been a level control since D006** — so the "pandemic demand
+reallocation: CONTROLLED" claim on every prior artifact was hollow. Both now enter as
+**trend controls**, interacted with every non-reference period, and
+`_demote_degenerate_controls` records any such move under `degenerate_controls`.
+
+**Bug 2 — the two halves of an artifact disagreed.** The demotion was first added only
+to `event_study`, so `did_two_period` in the *same artifact* kept the collinear level
+control. The headline DiD and its own dynamic path were estimating different
+specifications. The demotion is now shared by both and a test asserts they agree.
+
+**Effect on the headline.** Decomposed rather than reported as one jump:
+
+| specification | DiD | s.e. | t |
+|---|---|---|---|
+| as previously published (pre-HPI as level) | +0.0007 | 0.0197 | +0.03 |
+| pre-HPI moved to trend (bug fix alone) | −0.0100 | 0.0230 | −0.43 |
+| + teleworkable trend (this decision) | **+0.0237** | 0.0281 | +0.84 |
+| teleworkable trend only | +0.0347 | 0.0258 | +1.34 |
+| no controls at all | +0.0010 | 0.0190 | +0.05 |
+
+**The null survives all five.** No specification reaches |t| > 1.4. But the point
+estimate moves across roughly two standard errors, which is the honest characterisation
+of a 26-cluster design: the sign is not pinned down, and the null is a statement about
+power as much as about lock-in.
+
+Two other outcomes moved. The **denial-rate placebo now passes** (t = −1.00, was
+−1.90) — the previously reported placebo failure was an artifact of the mis-specified
+control, and `reports/failed_hypotheses.md` is updated to say so. `log_permits_1unit`
+still fails its pre-trend (p = 0.066) and stays `descriptive`.
+
+**A guard against the fix creating a new problem.** With `pre_hpi_growth_2019_2021` as a
+trend control, the `hpi_growth` pre-trend test jumped from p = 0.003 (fail) to p = 0.848
+(pass) — because the control is a lagged dependent variable interacted with time and
+absorbs the very pre-trend the test looks for. A test that cannot fail is not evidence.
+`_circular_trend_controls` detects a trend control drawn from the same published series
+as the outcome and **blocks promotion to `quasi_experimental`** regardless of the
+p-value. `hpi_growth` is therefore `descriptive` in this run, for a stated reason.
+
+### 2026-08-13 · D028 · Versioned OMB CBSA crosswalk, and how unstable the codes are **[AUTO]**
+`lockin.adapters.omb_cbsa` downloads six published delineation vintages (2013, 2015,
+2017, 2018, 2020, 2023) and builds two tables: a long CBSA/Metropolitan-Division ×
+county × vintage crosswalk, and a per-code stability verdict.
+
+Freddie Mac documents that its MSA field is **not** restated for redelineation, so a
+loan carries the code in force at origination. Grouping by that field across cohorts
+pools different geographies wherever OMB moved a boundary. The crosswalk cannot fix
+this — the county is not in the loan file — but it makes it auditable.
+
+**How bad it is, measured rather than assumed.** Of 1,054 codes:
+
+| verdict | codes |
+|---|---|
+| stable across all six vintages | 609 |
+| composition changed | 187 |
+| absent in some vintage | 188 |
+| renamed only (county set identical) | 59 |
+| metro ↔ micro reclassification | 11 |
+
+**Roughly 42% of codes do not mean the same place throughout.** Restricting to
+metropolitan CBSAs that are composition-stable leaves **215 candidate panel units** —
+still an eight-fold gain in clusters over the 26 states, and the reason this was the
+highest-value power fix.
+
+Three details that a naive crosswalk gets wrong, each pinned by a test:
+
+- **Composition is compared on the county *set*, not the count.** The 2023 Atlanta CBSA
+  swapped Lamar County out for Lumpkin County at a constant 29 counties. A count
+  comparison calls that stable; it is not.
+- **A rename is not a redefinition.** OMB adds and drops principal cities from titles
+  without moving a boundary, so `renamed_only` counts as usable. The first draft
+  excluded it, contradicting its own docstring.
+- **Metropolitan Divisions share the field with CBSAs.** Freddie's field 5 is "MSA *or
+  Metropolitan Division*", both five digits. They are loaded as separate `code_kind`
+  entries; folding divisions into their parent would silently rescope eleven large
+  metros.
+
+`absent_in_some_vintage` is excluded from the default panel but recorded, because
+whether it matters depends on the cohort span — a code missing only from the 2013
+delineation is harmless for a 2015+ sample.
+
+Dependencies: Census publishes 2023 as `.xlsx` and every earlier vintage as legacy
+`.xls`, so `openpyxl` and `xlrd>=2` are both required. The header row is *found* by
+searching for `CBSA Code` rather than hard-coded, because the number of banner rows is
+not constant across vintages.
+
+### 2026-08-13 · D029 · Optional sources are now actually fetched **[AUTO]**
+`bls_laus` was only ever `try_load`ed — no command fetched it — while
+`data/DATA_ACCESS.md` §R2 stated it was fetched by `make fetch-public-data`. A fresh
+clone would therefore have run with the local-labour-shock threat `UNCONTROLLED` while
+the documentation said otherwise, and nothing would have complained. `fetch-public-data`
+now fetches all three optional sources, reports them in a separate `optional` tier, and
+prints an explicit warning naming the threat left uncontrolled when one fails.

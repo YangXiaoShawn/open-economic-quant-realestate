@@ -25,7 +25,7 @@ from pathlib import Path
 
 import polars as pl
 
-from lockin.adapters import bls_laus, census_bps, fhfa_hpi, hmda
+from lockin.adapters import bls_laus, census_bps, fhfa_hpi, hmda, teleworkable
 from lockin.config import Config
 from lockin.manifest import write_manifest
 from lockin.stock import load_active_stock, predetermined_exposure
@@ -172,6 +172,25 @@ def build_local_panel(cfg: Config) -> tuple[pl.DataFrame, Path, list[str]]:
         notes.append(
             "BLS LAUS unemployment UNAVAILABLE -- the local-labour-shock threat in "
             "docs/IDENTIFICATION_STRATEGY.md 3.4 remains UNCONTROLLED in this run."
+        )
+
+    # --- teleworkable share (OPTIONAL) ---------------------------------------
+    # Addresses the remote-work-exposure threat in IDENTIFICATION_STRATEGY 3.2. It is a
+    # single cross-section, so it is joined WITHOUT a period key and must be used as a
+    # trend control, never a level control -- see lockin.adapters.teleworkable.
+    tele = teleworkable.try_load(cfg, cfg.panel.geography)
+    if tele is not None:
+        tele = tele.select("geography", "teleworkable_share")
+        notes.append(
+            f"Teleworkable share (Dingel & Neiman 2020): {tele.height:,} geographies, "
+            f"mean {float(tele['teleworkable_share'].mean()):.4f}, "
+            f"sd {float(tele['teleworkable_share'].std()):.4f}. Time-invariant, so it "
+            "enters the event study interacted with period indicators, not as a level."
+        )
+    else:
+        notes.append(
+            "Teleworkable share UNAVAILABLE -- the remote-work-exposure threat in "
+            "docs/IDENTIFICATION_STRATEGY.md 3.2 remains UNCONTROLLED in this run."
         )
 
     # --- monthly panel -------------------------------------------------------
@@ -383,6 +402,18 @@ def build_local_panel(cfg: Config) -> tuple[pl.DataFrame, Path, list[str]]:
         monthly = monthly.join(pre_growth, on="geography", how="left")
         annual = annual.join(pre_growth, on="geography", how="left")
         notes.append("Pre-period control added: cumulative log HPI growth 2019-01..2021-12.")
+
+    # Teleworkable share joins on geography only -- it has no time dimension. Joining it
+    # here rather than in the monthly/annual aggregation keeps it out of any mean() that
+    # would make it look time-varying.
+    if tele is not None:
+        monthly = monthly.join(tele, on="geography", how="left")
+        annual = annual.join(tele, on="geography", how="left")
+        matched = int(annual.select(pl.col("teleworkable_share").is_not_null().sum()).item())
+        notes.append(
+            f"Predetermined control added: teleworkable employment share, matched for "
+            f"{matched:,} of {annual.height:,} geography-years."
+        )
 
     if h is not None and "n_refi_originations" in h.columns:
         refi_intensity = (

@@ -146,8 +146,16 @@ def emit_layout() -> None:
 
 @app.command("fetch-public-data")
 def fetch_public_data(config: ConfigOpt = "configs/sample.yaml") -> None:
-    """Download the official public series (PMMS, FHFA HPI, HMDA, Census BPS)."""
-    from lockin.adapters import census_bps, fhfa_hpi, hmda, pmms
+    """Download the official public series, required and optional."""
+    from lockin.adapters import (
+        bls_laus,
+        census_bps,
+        fhfa_hpi,
+        hmda,
+        omb_cbsa,
+        pmms,
+        teleworkable,
+    )
 
     cfg = _cfg(config)
     results: dict[str, str] = {}
@@ -181,12 +189,47 @@ def fetch_public_data(config: ConfigOpt = "configs/sample.yaml") -> None:
     except Exception as exc:
         results["hmda"] = f"FAILED · {type(exc).__name__}: {exc}"
 
-    t = Table("source", "result")
+    # Optional sources. Each one closes a specific identification threat, and each is
+    # allowed to fail: the pipeline records the absence on every artifact rather than
+    # stopping. They are fetched HERE so that a fresh clone actually gets them --
+    # previously LAUS was only ever `try_load`ed, so a new checkout ran with the
+    # labour-shock threat uncontrolled while the documentation said otherwise.
+    optional: dict[str, str] = {}
+    try:
+        coverage, rows = bls_laus.fetch(cfg)
+        optional["bls_laus"] = f"ok · {rows:,} rows · {coverage}"
+    except Exception as exc:
+        optional["bls_laus"] = f"FAILED · {type(exc).__name__}: {exc}"
+
+    try:
+        counts = teleworkable.fetch(cfg)
+        optional["teleworkable"] = f"ok · {counts['state']} states · {counts['msa']} CBSAs"
+    except Exception as exc:
+        optional["teleworkable"] = f"FAILED · {type(exc).__name__}: {exc}"
+
+    try:
+        cw = omb_cbsa.fetch(cfg)
+        optional["omb_cbsa"] = (
+            f"ok · {cw['codes']:,} codes · {cw.get('stable', 0):,} stable across "
+            f"{len(omb_cbsa.VINTAGES)} vintages"
+        )
+    except Exception as exc:
+        optional["omb_cbsa"] = f"FAILED · {type(exc).__name__}: {exc}"
+
+    t = Table("source", "tier", "result")
     for k, v in results.items():
-        t.add_row(k, v)
+        t.add_row(k, "required", v)
+    for k, v in optional.items():
+        t.add_row(k, "optional", v)
     console.print(t)
     if any(v.startswith("FAILED") for v in results.values()):
         console.print("[yellow]Some sources failed. The pipeline continues with what is cached.[/]")
+    for k, v in optional.items():
+        if v.startswith("FAILED"):
+            console.print(
+                f"[yellow]{k} unavailable — the threat it addresses stays UNCONTROLLED "
+                "and every artifact records that.[/]"
+            )
 
 
 @app.command("prepare-sample-data")

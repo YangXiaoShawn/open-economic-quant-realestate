@@ -177,11 +177,32 @@ and records its absence.
 `User-Agent` containing your own contact email — that is your decision to make, not
 this repository's.
 
+**Teleworkable employment share — IMPLEMENTED, no registration.**
+`src/lockin/adapters/teleworkable.py`. Dingel & Neiman (2020), "How many jobs can be done
+at home?", *J. Public Economics* 189:104235 — the authors' public replication outputs on
+GitHub. State and CBSA levels, four published measures; the default is `teleworkable_emp`
+(O*NET survey rule, employment-weighted), **not** the `manual` pair, which is the authors'
+own subjective classification.
+
+Addresses the remote-work-exposure threat in `docs/IDENTIFICATION_STRATEGY.md` §3.2. It
+measures the **feasibility** of remote work, not its realisation — that distinction is
+carried on every artifact. Because it is a single cross-section it enters the event study
+**interacted with every period**, never as a level control; as a level it would be exactly
+collinear with the geography fixed effects and would constrain nothing. See `DECISION_LOG`
+D027, which also records the two specification bugs this exposed.
+
+**OMB CBSA delineation crosswalk — IMPLEMENTED, no registration.**
+`src/lockin/adapters/omb_cbsa.py`. Census Bureau List 1 delineation files for six OMB
+vintages (2013, 2015, 2017, 2018, 2020, 2023), public domain.
+
+Required for any MSA-level analysis, because Freddie Mac's MSA field is as-of-origination
+and is **not** restated when OMB redraws a boundary. The adapter records, per code,
+whether its county composition, title, or metro/micro status ever changed. Measured
+result: of 1,054 codes only 609 are stable across all six vintages, and **215 metropolitan
+CBSAs are both stable and usable** as panel units. See `DECISION_LOG` D028.
+
 **Not yet implemented, and each leaves a documented gap:**
 
-- **Teleworkable employment share** — would address the remote-work-exposure threat in
-  `docs/IDENTIFICATION_STRATEGY.md` §3.2, currently `UNCONTROLLED` in the
-  `identification_threats` map on every event-study artifact.
 - **IRS SOI county-to-county migration** — public, but requires manual file selection.
 - **Census ACS housing tenure / vacancy** — public API; a free key is needed for
   high-volume use.

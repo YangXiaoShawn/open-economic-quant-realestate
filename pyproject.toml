@@ -21,6 +21,11 @@ dependencies = [
     "matplotlib>=3.9",
     "requests>=2.32",
     "pyyaml>=6.0",
+    # Census publishes the OMB CBSA delineation files as .xlsx for 2023 and legacy
+    # .xls for every earlier vintage, so both readers are required to build the
+    # versioned crosswalk. xlrd>=2 is .xls-only by design; openpyxl covers .xlsx.
+    "xlrd>=2.0.1",
+    "openpyxl>=3.1",
     "typer>=0.15",
     "rich>=13.9",
 ]
@@ -92,6 +97,8 @@ module = [
     "lockin.adapters.fhfa_hpi",
     "lockin.adapters.census_bps",
     "lockin.adapters.bls_laus",
+    "lockin.adapters.teleworkable",
+    "lockin.adapters.omb_cbsa",
     "lockin.panel.*",
     "lockin.survival.*",
 ]
