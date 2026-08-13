@@ -798,3 +798,23 @@ have come back empty and the "try every state" logic would have reported that no
 worked. Caught by comparing against the identifier verified live before any code was
 written. The function now asserts the 13-character area code, and a test pins both the
 length and the two verified identifiers.
+
+### 2026-08-13 · D040 · Metro sources wired into the panel; request volume constrained **[AUTO]**
+`build_local_panel` now selects the metropolitan loader for each source when
+`panel.geography == "msa"`: `census_bps.load_metro`, `bls_laus.try_load_metro`,
+`hmda.load_msa`, and FHFA at `level="MSA"`. The state path is untouched — the metro
+branch exits through a sentinel rather than restructuring the try blocks, so the default
+geography keeps the exact shape every existing test exercises.
+
+**A first MSA panel would cost ~12,350 HMDA requests against ~1,530 for the state
+panel** — 393 metros × 6 years × 5 measures, against a free public service. `fetch_msa`
+therefore takes `restrict_to`. A metro with no loans in the Freddie sample contributes a
+null exposure and is dropped by the panel builder regardless, so fetching it buys
+nothing. The adapter does not read the loan tables itself, so the caller supplies the
+set; passing division codes or a wrong vintage raises rather than silently returning an
+empty panel.
+
+Still open before an MSA run can be believed: the **multi-state allocation rule**. 43 of
+the 393 metropolitan CBSAs span more than one state, and while all four panel sources now
+resolve at metro level, nothing yet decides how a state-published quantity is
+apportioned when one is needed.

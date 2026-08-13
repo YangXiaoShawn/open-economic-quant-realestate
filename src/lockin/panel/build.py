@@ -90,6 +90,14 @@ STATE_FIPS_TO_ABBR: dict[int, str] = {
 _HPI_LEVEL: dict[str, str] = {"state": "State", "msa": "MSA"}
 
 
+class _MetroLoaded(Exception):
+    """Internal: the metro branch already populated this source.
+
+    A sentinel rather than restructuring the whole try block, so the state path -- which
+    is the default and is exercised by every existing test -- keeps its exact shape.
+    """
+
+
 class GeographyMismatchError(RuntimeError):
     """A source is keyed to a different geography than the panel.
 
@@ -176,6 +184,21 @@ def build_local_panel(cfg: Config) -> tuple[pl.DataFrame, Path, list[str]]:
 
     # --- permits -------------------------------------------------------------
     try:
+        if cfg.panel.geography == "msa":
+            # Already keyed by CBSA code; no FIPS translation, and no Metropolitan
+            # Divisions -- BPS reports parent CBSAs (DECISION_LOG D038).
+            bps = (
+                census_bps.load_metro(cfg)
+                .with_columns(pl.lit(None, dtype=pl.Int64).alias("permits_2to4unit_unused"))
+                .drop("permits_2to4unit_unused")
+            )
+            _assert_geography_compatible("Census BPS (metro)", bps, panel_geos, cfg, notes)
+            notes.append(
+                f"Census BPS (metro): {bps.height:,} CBSA-months, vintages "
+                f"{sorted(set(bps['vintage'].to_list()))}. Parent CBSAs, not divisions. "
+                "Files from 2024 on use the 2023 OMB delineation; earlier ones do not."
+            )
+            raise _MetroLoaded
         bps = census_bps.load(cfg)
         bps = (
             bps.with_columns(
@@ -199,6 +222,8 @@ def build_local_panel(cfg: Config) -> tuple[pl.DataFrame, Path, list[str]]:
             f"Census BPS: {bps.height:,} state-months, vintages "
             f"{sorted(set(bps['vintage'].to_list()))}"
         )
+    except _MetroLoaded:
+        pass
     except FileNotFoundError as exc:
         bps = None
         notes.append(f"Census BPS UNAVAILABLE: {exc}")
@@ -206,7 +231,14 @@ def build_local_panel(cfg: Config) -> tuple[pl.DataFrame, Path, list[str]]:
     # --- unemployment (OPTIONAL) ---------------------------------------------
     # Addresses the local-labour-shock threat in IDENTIFICATION_STRATEGY 3.4. The
     # panel is built with or without it; absence is recorded, never silently ignored.
-    laus = bls_laus.try_load(cfg)
+    laus = bls_laus.try_load_metro(cfg) if cfg.panel.geography == "msa" else bls_laus.try_load(cfg)
+    if laus is not None and cfg.panel.geography == "msa":
+        notes.append(
+            "BLS LAUS at metro level is NOT seasonally adjusted, unlike the state "
+            "series. The annual panel averages twelve months, which removes most of the "
+            "seasonality; the MONTHLY metro rate is not comparable to the monthly state "
+            "rate (DECISION_LOG D039)."
+        )
     if laus is not None and not (set(laus["geography"].unique().to_list()) & panel_geos):
         notes.append(
             "BLS LAUS is published for STATES and shares no key with a "
@@ -269,7 +301,7 @@ def build_local_panel(cfg: Config) -> tuple[pl.DataFrame, Path, list[str]]:
 
     # --- HMDA (annual) -------------------------------------------------------
     try:
-        h = hmda.load(cfg)
+        h = hmda.load_msa(cfg) if cfg.panel.geography == "msa" else hmda.load(cfg)
         _assert_geography_compatible("HMDA", h, panel_geos, cfg, notes)
         notes.append(
             f"HMDA: {h.height:,} state-years, coverage regimes "

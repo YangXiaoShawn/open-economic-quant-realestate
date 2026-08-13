@@ -396,6 +396,7 @@ def fetch_msa(
     years: list[int] | None = None,
     cells: tuple[tuple[str, str, str], ...] = DEFAULT_CELLS,
     max_workers: int = 6,
+    restrict_to: set[str] | None = None,
 ) -> tuple[str, int]:
     """Populate the HMDA cache at **metropolitan** geography.
 
@@ -420,6 +421,25 @@ def fetch_msa(
 
     years = years or cfg.panel.hmda_years
     resolved = {y: omb_cbsa.hmda_geographies(cfg, y) for y in years}
+
+    # Fetching every published metro costs ~12,350 requests against a public service,
+    # against ~1,530 for the state panel. A metro with no loans in the sample contributes
+    # a null exposure and is dropped by the panel builder anyway, so restricting to the
+    # geographies actually present in the loan stock buys nothing but goodwill -- and it
+    # is the caller's job to say which those are, since this adapter does not read the
+    # loan tables.
+    if restrict_to is not None:
+        keep = {str(g) for g in restrict_to}
+        resolved = {
+            y: df.filter(pl.col("cbsa_code").is_in(list(keep))) for y, df in resolved.items()
+        }
+        empty = [y for y, df in resolved.items() if df.height == 0]
+        if empty:
+            raise AdapterError(
+                f"restrict_to matched no metropolitan areas for year(s) {empty}. The codes "
+                "given are probably Metropolitan Divisions or a different delineation "
+                "vintage -- pass PARENT CBSA codes."
+            )
 
     jobs = [
         (year, row["report_code"], row["cbsa_code"], label, purpose, action)
