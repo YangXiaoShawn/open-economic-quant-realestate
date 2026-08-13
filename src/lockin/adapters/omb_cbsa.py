@@ -573,3 +573,54 @@ def hmda_geographies(cfg: Config, year: int) -> pl.DataFrame:
         .unique(subset=["report_code"])
         .sort("report_code")
     )
+
+
+def to_parent_cbsa(
+    cfg: Config, codes: list[str], vintage: str = DEFAULT_ANALYSIS_VINTAGE
+) -> pl.DataFrame:
+    """Map observed codes to the **parent CBSA**, which is the analysis unit.
+
+    Freddie Mac's field 5 holds an MSA *or a Metropolitan Division*, and in the real
+    Standard dataset 4,657,458 loans of 20,199,214 carry a division code -- the largest
+    metros in the country. Left unmapped they match nothing in the Census permit series
+    or in LAUS, both of which report parent CBSAs, and the panel silently loses New York,
+    Los Angeles, Chicago, Dallas, Washington and the rest.
+
+    A division's parent is found by shared counties rather than by any relation between
+    the codes, because there is none: Chicago's division is 16984 under parent 16980, but
+    Boston's is 14454 under 14460.
+
+    Returns ``area_code`` -> ``cbsa_code`` plus ``code_kind`` and ``area_title``. Codes
+    that resolve to nothing keep a null ``cbsa_code`` and are the caller's to drop or
+    report -- never to guess at.
+    """
+    cw = load_crosswalk(cfg).filter(pl.col("vintage") == vintage)
+    if cw.height == 0:
+        raise AdapterError(f"vintage {vintage!r} is not in the cached crosswalk")
+
+    metro_counties = cw.filter(pl.col("code_kind") == "cbsa").select(
+        pl.col("area_code").alias("cbsa_code"), "county_geoid"
+    )
+    div_parent = (
+        cw.filter(pl.col("code_kind") == "metdiv")
+        .join(metro_counties, on="county_geoid", how="inner")
+        .group_by("area_code")
+        .agg(pl.col("cbsa_code").mode().first())
+    )
+    self_parent = (
+        cw.filter(pl.col("code_kind") == "cbsa")
+        .select("area_code")
+        .unique()
+        .with_columns(pl.col("area_code").alias("cbsa_code"))
+    )
+    mapping = pl.concat([div_parent, self_parent], how="vertical").unique(subset=["area_code"])
+
+    attrs = cw.group_by("area_code").agg(
+        pl.col("area_title").first(), pl.col("code_kind").first(), pl.col("cbsa_type").first()
+    )
+    obs = pl.DataFrame({"area_code": [str(c).strip() for c in codes]}).unique()
+    return (
+        obs.join(mapping, on="area_code", how="left")
+        .join(attrs, on="area_code", how="left")
+        .sort("area_code")
+    )

@@ -1,0 +1,120 @@
+# REGISTERED full-set profile -- the REAL Freddie Mac Standard dataset.
+#
+# Read IN PLACE from data/raw/full_set_standard_historical_data.zip through three levels
+# of nesting. Nothing is extracted: the archive is ~40 GB and the machine has less free
+# disk than that.
+#
+# COHORT CHOICE IS A POPULATION RESTRICTION, and it biases the treatment.
+# The design needs the stock of mortgages alive at the 2021-12 pre-shock date. Cohorts
+# 2013Q1-2022Q4 cover the bulk of that stock after the 2020-21 refinance wave, but
+# truncating at 2013 drops SURVIVING HIGH-COUPON loans from earlier cohorts. Those
+# borrowers are not locked in, so excluding them understates the un-locked share and
+# therefore OVERSTATES exposure -- by an amount that differs across states, since states
+# differ in how much old stock survives. The direction is predictable; the magnitude is
+# not corrected. Widen `cohorts` to reduce it.
+#
+# The performance window still filters to 2021-01..2024-12 before anything is written,
+# so the parquet footprint is the window, not the full history. Reading is still a full
+# pass over each cohort's performance file.
+
+# Sample run profile.
+#
+# Loan-level inputs: labeled SYNTHETIC fixtures (data/fixtures/freddie).
+# Aggregate inputs:  REAL official public series (PMMS, FHFA HPI, HMDA, Census BPS).
+#
+# Every artifact from this profile is stamped data_class=SYNTHETIC and every report
+# renders the synthetic-data banner. No number produced here is an empirical finding
+# about U.S. mortgages.
+#
+# If you complete the registration in data/DATA_ACCESS.md §R1 and place archives in
+# data/raw/freddie/, switch mortgage.mode to registered_sample or registered_full;
+# the adapters pick the real files up automatically and the banner disappears.
+
+name: msa_full
+label: "REGISTERED Freddie Mac Standard dataset + official public aggregate series"
+
+mortgage:
+  mode: registered_full
+  # Three cohorts spanning the pre-pandemic, refinance-boom, and post-boom coupon
+  # regimes, so the pre-shock coupon distribution has real cross-cohort spread.
+  cohorts: ["2013Q1", "2013Q2", "2013Q3", "2013Q4", "2014Q1", "2014Q2", "2014Q3", "2014Q4", "2015Q1", "2015Q2", "2015Q3", "2015Q4", "2016Q1", "2016Q2", "2016Q3", "2016Q4", "2017Q1", "2017Q2", "2017Q3", "2017Q4", "2018Q1", "2018Q2", "2018Q3", "2018Q4", "2019Q1", "2019Q2", "2019Q3", "2019Q4", "2020Q1", "2020Q2", "2020Q3", "2020Q4", "2021Q1", "2021Q2", "2021Q3", "2021Q4", "2022Q1", "2022Q2", "2022Q3", "2022Q4"]
+  performance_start: "2021-01"
+  performance_end: "2024-12"
+  fixed_rate_only: true
+  synthetic_loans_per_cohort: 3500
+  synthetic_seed: 20260810
+  chunk_rows: 500000
+
+rates:
+  series: pmms30
+  alternative_series: ["pmms15"]
+  cross_check_fred: true
+
+lockin:
+  thresholds_bp: [100, 200, 300, 400]
+  holding_period_months: 84
+  discount_rate_pct: 4.0
+  refi_incentive_threshold_bp: 50
+
+survival:
+  max_episode_rows: 800000000
+  # 5% random sample of LOANS, all their months kept. 15M loans -> ~750k, which is
+  # still a very large estimation sample. Sized by DISK, not RAM: the estimator's
+  # peak RSS is under 7 GB, but Polars streaming scratch accumulates across the ten
+  # hazard stages and at 15% it walked the disk from 76 GB free down to 18 GB and
+  # falling before the run was stopped.
+  loan_sample_fraction: 0.05
+  non_event_sample_fraction: 0.05
+  # Apply the case-cohort filter WHILE writing episodes, not after. The unsampled
+  # 40-cohort episode table is ~522M loan-months and materialising it exhausted the
+  # disk. Same predicate, same selected rows -- it just never builds the full table.
+  sample_at_episode_build: true
+  age_bin_edges: [0, 6, 12, 18, 24, 36, 48, 60, 84, 120, 360]
+  out_of_time_split: "2024-01"
+  seed: 20260810
+
+panel:
+  geography: msa
+  states: []            # empty = every state present in the loan data
+  hpi_flavor: purchase-only
+  # FHFA publishes purchase-only MONTHLY only nationally; at State level it is
+  # QUARTERLY. Asking for monthly state purchase-only returns nothing.
+  hpi_frequency: quarterly
+  hpi_seasonal: nsa
+  hmda_years: [2018, 2019, 2020, 2021, 2022, 2023]
+  permits_years: [2018, 2019, 2020, 2021, 2022, 2023]
+  min_loans_per_geography: 100
+
+event_study:
+  pre_shock_date: "2021-12"
+  shock_date: "2022-01"
+  window_pre_periods: 3
+  window_post_periods: 2
+  reference_period_offset: -1
+  exposure_measure: locked_share_upb_200
+  alternative_exposures:
+    - locked_share_count_200
+    - locked_share_upb_100
+    - locked_share_upb_300
+    - mean_payment_gap
+  placebo_shock_dates: ["2018-01", "2019-06"]
+  cluster_by: geography
+  outcomes:
+    - log_purchase_originations
+    - log_refi_originations
+    - hpi_growth
+    - log_permits_1unit
+    - log_permits_5plus
+    - denial_rate
+
+simulation:
+  rate_shocks_bp: [-50, -100, -200]
+  portability_share: 0.5
+  assumability_share: 0.3
+  seller_credit_dollars: 10000.0
+  buydown_bp: 100
+  supply_elasticity_multiplier: 1.5
+  price_elasticity_of_demand: -0.6
+  supply_elasticity: 1.0
+
+offline: false

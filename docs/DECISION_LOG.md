@@ -818,3 +818,45 @@ Still open before an MSA run can be believed: the **multi-state allocation rule*
 the 393 metropolitan CBSAs span more than one state, and while all four panel sources now
 resolve at metro level, nothing yet decides how a state-published quantity is
 apportioned when one is needed.
+
+### 2026-08-13 · D041 · Freddie's MSA field is half Metropolitan Divisions **[AUTO]**
+The multi-state allocation rule flagged as the last blocker for #3 turned out to be
+**moot**: every panel source now resolves natively at CBSA level — FHFA at `level="MSA"`,
+HMDA through the year-versioned division mapping, BPS and LAUS at parent CBSA,
+teleworkable by CBSA. Nothing is published only by state any more, so nothing needs
+apportioning. Recorded because it was on the plan and is now off it.
+
+The real blocker was elsewhere, and larger. Resolving the 452 distinct MSA codes present
+in the registered loan data against the crosswalk:
+
+| what the code is | codes | loans |
+|---|---|---|
+| metropolitan CBSA, composition stable | 208 | 5,260,786 |
+| **Metropolitan Division** | 37 | **4,657,458** |
+| metropolitan CBSA, composition changed | 105 | 4,263,976 |
+| metropolitan CBSA, renamed only | 47 | 2,933,059 |
+| in no loaded vintage (retired) | 31 | 898,908 |
+
+**4.66 million loans carry a division code**, because Freddie's field 5 is "MSA *or
+Metropolitan Division*". Unmapped they match nothing in the Census permit series or LAUS,
+both of which report parent CBSAs — so the panel would silently lose New York, Los
+Angeles, Chicago, Dallas and Washington rather than fail.
+
+`omb_cbsa.to_parent_cbsa` maps them by **shared counties**, since the codes bear no
+relation to each other: Chicago's division is 16984 under parent 16980, Boston's is 14454
+under 14460. Verified against those landmarks plus New York 35614→35620 and Los Angeles
+31084→31080. **421 of 452 codes resolve, covering 17,225,055 of 18,124,095 loans (95%),
+onto 395 parent CBSAs.** The 31 unresolved codes stay null and are dropped, never guessed
+at — assigning a retired code to a neighbouring metro would be fabrication.
+
+**The loan sample thins the panel, and the threshold hides it.** `min_loans_per_geography`
+counts *sampled* loans, so at `loan_sample_fraction=0.05` a nominal 100 is really ~2,000
+real loans. That is what takes the MSA panel from 395 metros to **138** — still 2.7× the
+51 states, but the gap is the sampling and not the geography. The stock manifest now
+records the nominal threshold, the fraction, the unsampled equivalent, and how many units
+were dropped, so the number is visible rather than surprising.
+
+**And a cache that answered the wrong question.** `bls_laus.fetch_metro` returned any
+existing file without checking it covered the requested years, so a panel asking for
+2018–2023 silently got a 2021–2022 file cached by an earlier probe. Both LAUS fetchers now
+compare cached years against requested ones and refetch on a shortfall.

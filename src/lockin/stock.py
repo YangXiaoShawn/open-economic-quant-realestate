@@ -50,6 +50,46 @@ def _threshold_exprs(thresholds_bp: list[int]) -> list[pl.Expr]:
     return out
 
 
+def geography_expr(cfg: Config) -> pl.Expr:
+    """The column that defines a panel unit, as an expression.
+
+    At state level this is simply ``property_state``. At MSA level it is the Freddie Mac
+    MSA field **normalised to its parent CBSA**, because that field holds an MSA *or a
+    Metropolitan Division* and 4.66 million of the 20.2 million real loans carry a
+    division code. Grouping on the raw field would split the largest metros away from
+    the Census permit and LAUS series, both of which report parent CBSAs, and those
+    metros would vanish from the panel rather than error.
+    """
+    if cfg.panel.geography == "state":
+        return pl.col("property_state")
+    return pl.col("_cbsa_parent")
+
+
+def with_geography(cfg: Config, lf: pl.LazyFrame) -> pl.LazyFrame:
+    """Attach the parent-CBSA column when the panel geography needs it.
+
+    Codes that resolve to no CBSA -- retired ones from delineations older than any
+    vintage loaded -- stay null and are dropped by the caller's ``drop_nulls``. They are
+    never guessed at: an unmappable code is 4.5% of loans here, and assigning them to a
+    neighbouring metro would be fabrication.
+    """
+    if cfg.panel.geography == "state":
+        return lf
+    from lockin.adapters import omb_cbsa
+
+    observed = lf.select(pl.col("msa_code").drop_nulls().unique()).collect()["msa_code"].to_list()
+    mapping = omb_cbsa.to_parent_cbsa(cfg, [str(c) for c in observed]).select(
+        pl.col("area_code").alias("msa_code"), pl.col("cbsa_code").alias("_cbsa_parent")
+    )
+    return lf.join(mapping.lazy(), on="msa_code", how="left")
+
+
+#: Populated by :func:`build_active_stock` so the manifest can record how many panel
+#: units the loan-count threshold removed, and what that threshold means once the
+#: sampling fraction is undone.
+_THRESHOLD_NOTE: dict[str, object] = {}
+
+
 def stock_filename(cfg: Config) -> str:
     """Filename for the active stock, keyed by geography.
 
@@ -63,8 +103,8 @@ def stock_filename(cfg: Config) -> str:
 
 def build_active_stock(cfg: Config) -> tuple[pl.DataFrame, Path]:
     """Aggregate the episode table into a geography-month active-stock table."""
-    geo = "property_state" if cfg.panel.geography == "state" else "msa_code"
-    lf = scan_episodes(cfg)
+    geo = "property_state" if cfg.panel.geography == "state" else "_cbsa_parent"
+    lf = with_geography(cfg, scan_episodes(cfg))
 
     if cfg.panel.states:
         lf = lf.filter(pl.col("property_state").is_in(cfg.panel.states))
@@ -117,13 +157,30 @@ def build_active_stock(cfg: Config) -> tuple[pl.DataFrame, Path]:
     )
 
     if cfg.panel.min_loans_per_geography > 0:
+        # The threshold counts SAMPLED loans, so on a sampled run it is far stricter than
+        # it reads. At loan_sample_fraction=0.05 a nominal 100 means roughly 2,000 real
+        # loans, and that is what thins an MSA panel from ~395 metros to ~138. Stated
+        # rather than left for someone to rediscover from a surprising geography count.
+        frac = float(getattr(cfg.survival, "loan_sample_fraction", 1.0)) or 1.0
+        effective = int(cfg.panel.min_loans_per_geography / max(frac, 1e-9))
         keep = (
             agg.group_by("geography")
             .agg(pl.col("n_active_loans").median().alias("med"))
             .filter(pl.col("med") >= cfg.panel.min_loans_per_geography)["geography"]
         )
+        dropped = agg["geography"].n_unique() - len(keep)
         agg = agg.filter(pl.col("geography").is_in(keep))
         cohort_mix = cohort_mix.filter(pl.col("geography").is_in(keep))
+        _THRESHOLD_NOTE.clear()
+        _THRESHOLD_NOTE.update(
+            {
+                "min_loans_per_geography": cfg.panel.min_loans_per_geography,
+                "loan_sample_fraction": frac,
+                "effective_unsampled_equivalent": effective,
+                "n_geographies_dropped": dropped,
+                "n_geographies_kept": len(keep),
+            }
+        )
 
     out = cfg.path("processed", stock_filename(cfg))
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -157,7 +214,13 @@ def build_active_stock(cfg: Config) -> tuple[pl.DataFrame, Path]:
             "Attrition over the window is reported in extra.coverage.",
         ],
         data_class=cfg.manifest_data_class,
-        extra={"coverage": cov, "thresholds_bp": thr, "weights": ["loan_count", "current_upb"]},
+        extra={
+            "coverage": cov,
+            "thresholds_bp": thr,
+            "weights": ["loan_count", "current_upb"],
+            "geography": cfg.panel.geography,
+            "loan_count_threshold": dict(_THRESHOLD_NOTE),
+        },
     )
     return (agg, out)
 
@@ -295,8 +358,8 @@ def predetermined_exposure(
     else:
         rate_meta = {"post_shock_rate_level_pct": post_rate, "source": "caller-supplied"}
 
-    geo = "property_state" if cfg.panel.geography == "state" else "msa_code"
-    lf = scan_episodes(cfg).filter(pl.col("period") == cut)
+    geo = "property_state" if cfg.panel.geography == "state" else "_cbsa_parent"
+    lf = with_geography(cfg, scan_episodes(cfg).filter(pl.col("period") == cut))
 
     pre_loans = (
         lf.select(

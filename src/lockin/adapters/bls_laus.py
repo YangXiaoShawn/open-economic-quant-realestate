@@ -161,7 +161,14 @@ def fetch(
 
     target = cache_path(cfg, "bls_laus", FILENAME)
     if target.exists():
-        return _coverage_of(pl.read_parquet(target))
+        cached = pl.read_parquet(target)
+        have = set(cached["period"].dt.year().unique().to_list())
+        missing = sorted(set(years) - have)
+        if not missing:
+            return _coverage_of(cached)
+        if cfg.offline:
+            raise OfflineError(f"offline=True and cached LAUS is missing year(s) {missing}")
+        target.unlink()
     if cfg.offline:
         raise OfflineError(f"offline=True and LAUS not cached at {target}")
 
@@ -356,7 +363,17 @@ def fetch_metro(cfg: Config, years: list[int] | None = None) -> tuple[str, int]:
         )
     target = cache_path(cfg, "bls_laus", METRO_FILENAME)
     if target.exists():
-        return _coverage_of(pl.read_parquet(target))
+        cached = pl.read_parquet(target)
+        # A cache hit is only a hit if it covers the years asked for. Returning a file
+        # fetched for a narrower range silently hands back a shorter panel, and the
+        # caller sees a coverage string it did not request rather than an error.
+        have = set(cached["period"].dt.year().unique().to_list())
+        missing = sorted(set(years) - have)
+        if not missing:
+            return _coverage_of(cached)
+        if cfg.offline:
+            raise OfflineError(f"offline=True and cached metro LAUS is missing year(s) {missing}")
+        target.unlink()
     if cfg.offline:
         raise OfflineError(f"offline=True and metro LAUS not cached at {target}")
 
