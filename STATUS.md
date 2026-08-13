@@ -236,11 +236,12 @@ stamped the output `SYNTHETIC`.
    this failed: it built a plausible-looking 182-row panel with MSA exposure joined onto
    state outcomes and teleworkable matching 0 of 182 rows, without raising anything.
 
-   | source | MSA support needed |
-   |---|---|
-   | HMDA | CFPB Data Browser accepts `msamds`; adapter passes `states` only |
-   | Census BPS | MSA files exist under a different path and layout |
-   | BLS LAUS | metro series exist (`LAUMT…`); adapter builds state IDs only |
+   | source | MSA support | note |
+   |---|---|---|
+   | FHFA HPI | **done** | resolves at MSA level via config |
+   | HMDA | **done** (`fetch_msa`) | needs per-year delineation resolution + a non-zero guard; reports **divisions**, D036/D037 |
+   | Census BPS | **done** (`fetch_metro`) | two directories split at Jan 2024; reports **parent CBSA**, D038 |
+   | BLS LAUS | remaining | metro series exist (`LAUMT…`); adapter builds state IDs only |
 
    Two design questions to settle when doing it: **47 of the 430 metro CBSAs span more than one
    state**, so any state-published control needs an allocation rule; and Freddie's MSA
