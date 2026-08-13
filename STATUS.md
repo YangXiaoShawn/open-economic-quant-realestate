@@ -30,15 +30,15 @@ panel → exposure event study → automatically generated research memo.
 |---|---|
 | Pipeline stages | **19 / 19 OK** (`uv run lockin status`) |
 | Result artifacts | **37**, all with evidence tier + population + provenance |
-| Tests | **157 passed**, 1 skipped, 0 failed |
+| Tests | **162 passed**, 1 skipped, 0 failed |
 | `ruff check` | clean |
 | `ruff format --check` | clean |
 | `mypy` | clean (47 source files; core interfaces strict) |
-| `make validate-data` | **0 hard**, 0 soft, 11 informational |
+| `make validate-data` | **0 hard**, 4 soft, 13 informational (~4.5 min on the real data) |
 | Generated reports | 10 |
 
 Artifacts by tier: `descriptive` 15 · `hazard_association` 8 · `quasi_experimental` 3 ·
-`simulation` 11. Data class: **36 REGISTERED**, 1 SYNTHETIC (a stale validation report).
+`simulation` 11. Data class: **all 37 REGISTERED**.
 
 The tier mix moved sharply against the causal reading when real data arrived —
 `quasi_experimental` fell from 6 to 3 — because real pre-trends fail where synthetic ones
@@ -66,6 +66,13 @@ documentation — see `DECISION_LOG` D031 and `lockin/schemas/variants.py`. Anch
 cross-file join (1,218 / 1,218 exact matches); two fields identified as *moved* by their
 value domains; two positions left **undocumented and never interpreted**. No research
 variable depends on an inferred or undocumented field, and a test enforces that.
+
+**Data-quality findings in the source files**, surfaced by validation and reported rather
+than silently dropped: 35 loans of 20,199,214 carry `orig_loan_term` of 481–544 months,
+one loan carries a `0.0` note rate, and there are 68 within-loan month gaps in the
+performance series. All are retained; none is frequent enough to indicate a parsing
+fault, and severity is scaled by prevalence so a systematic break would still stop the
+run (`DECISION_LOG` D035).
 
 ---
 
