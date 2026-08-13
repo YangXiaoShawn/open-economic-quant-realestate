@@ -639,3 +639,18 @@ the code did before, would have understated the population by a factor of 20.
 loading `configs/sample.yaml` and checking the markdown on disk — which belonged to
 whichever profile last rendered. `render_all` now stamps the reports directory, and the
 test asks the directory what produced it instead of assuming.
+
+### 2026-08-13 · D034 · `validate-data` does not scale to the real dataset **[AUTO, OPEN]**
+Every other stage completes on the registered data in minutes. `validate-data` ran for
+over thirty minutes without finishing and was stopped. Disk stayed flat at ~28 GB free
+throughout, so it is not spilling — it is doing per-loan work that does not scale, most
+likely one of the whole-table `.collect()` calls in `lockin.episodes.validate_episodes`
+or `lockin.events.validate_events`.
+
+**This is an open defect, recorded rather than papered over.** `outputs/validation/
+validation_report.json` is consequently the one artifact still stamped `SYNTHETIC`: it is
+left over from the fixture run and **does not describe the registered data**. It must not
+be read as validation of anything in this run.
+
+The fix is the same shape as D032: the validators are per-loan or per-cohort by nature and
+should iterate cohorts rather than collecting the full table.
