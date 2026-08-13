@@ -471,3 +471,105 @@ def resolve(
         .sort("area_code")
     )
     return out
+
+
+#: Which delineation vintage HMDA reports under, by data year.
+#:
+#: **Established empirically, not from an effective-date rule.** OMB bulletins take
+#: effect in HMDA with a lag that is not documented anywhere this project could find, and
+#: guessing it produces silent zeros rather than errors (``DECISION_LOG`` D036). Each
+#: boundary below was located by querying the CFPB aggregations API for codes that exist
+#: in only one vintage and seeing which years return a real count:
+#:
+#: ===========  =========  ==========================================================
+#: HMDA year    vintage    evidence
+#: ===========  =========  ==========================================================
+#: 2018         2017       Chicago division is 16974 (2015/2017 vintages only);
+#:                         16984 returns 0
+#: 2019-2023    2018       Chicago division is 16984; 16974 returns 0 from 2019 on
+#: 2024+        2023       Atlanta division 12054 and Arlington division 11694 appear;
+#:                         Atlanta CBSA 12060 and Washington division 47894 drop to 0
+#: ===========  =========  ==========================================================
+#:
+#: The 2020 bulletin changed nothing that separates it from 2018 for these codes, so
+#: 2018 is used for the whole 2019-2023 span.
+_HMDA_YEAR_VINTAGE: Final[tuple[tuple[int, str], ...]] = (
+    (2024, "2023"),
+    (2019, "2018"),
+    (2018, "2017"),
+)
+
+#: Below this year the mapping has not been checked against the API. HMDA's public
+#: aggregations start at 2018 anyway.
+HMDA_FIRST_VERIFIED_YEAR: Final[int] = 2018
+
+
+def vintage_for_hmda_year(year: int) -> str:
+    """Delineation vintage that HMDA reports under for ``year``.
+
+    Raises for years the mapping was never verified against, rather than extrapolating:
+    an unverified guess here yields zero counts that look like real observations.
+    """
+    if year < HMDA_FIRST_VERIFIED_YEAR:
+        raise AdapterError(
+            f"HMDA year {year} is before {HMDA_FIRST_VERIFIED_YEAR}, the earliest year "
+            "whose delineation vintage this project verified against the API. Do not "
+            "extrapolate -- an unverified vintage returns silent zeros, not errors."
+        )
+    for first_year, vintage in _HMDA_YEAR_VINTAGE:
+        if year >= first_year:
+            return vintage
+    raise AdapterError(f"no delineation vintage mapped for HMDA year {year}")
+
+
+def hmda_geographies(cfg: Config, year: int) -> pl.DataFrame:
+    """The codes HMDA actually reports for ``year``, one row per reporting area.
+
+    HMDA reports a **Metropolitan Division wherever one exists** and the CBSA otherwise;
+    querying a divided metro by its parent CBSA code returns zero without error, which
+    would silently empty out New York, Los Angeles, Chicago, Dallas and every other large
+    metro. This resolves each metropolitan CBSA to the code HMDA will answer on.
+
+    Returns ``report_code`` (what to send to the API), ``cbsa_code`` (the parent, which is
+    the stable analysis unit), ``code_kind`` and ``area_title``.
+    """
+    vintage = vintage_for_hmda_year(year)
+    cw = load_crosswalk(cfg).filter(pl.col("vintage") == vintage)
+    if cw.height == 0:
+        raise AdapterError(
+            f"delineation vintage {vintage!r} (needed for HMDA {year}) is not in the "
+            f"cached crosswalk. Fetch it: omb_cbsa.fetch(cfg, vintages=['{vintage}'])."
+        )
+    metro = cw.filter((pl.col("code_kind") == "cbsa") & (pl.col("cbsa_type") == "metro"))
+    divisions = cw.filter(pl.col("code_kind") == "metdiv")
+
+    # A division's parent is the CBSA sharing its counties. Join on county rather than
+    # trusting a code prefix -- division codes are not derived from their parent's.
+    parent = (
+        divisions.join(
+            metro.select("area_code", "county_geoid").rename({"area_code": "cbsa_code"}),
+            on="county_geoid",
+            how="inner",
+        )
+        .group_by(["area_code", "cbsa_code"])
+        .agg(pl.col("area_title").first())
+        .rename({"area_code": "report_code"})
+        .with_columns(pl.lit("metdiv").alias("code_kind"))
+    )
+    divided = set(parent["cbsa_code"].to_list())
+    undivided = (
+        metro.filter(~pl.col("area_code").is_in(list(divided)))
+        .group_by("area_code")
+        .agg(pl.col("area_title").first())
+        .select(
+            pl.col("area_code").alias("report_code"),
+            pl.col("area_code").alias("cbsa_code"),
+            "area_title",
+            pl.lit("cbsa").alias("code_kind"),
+        )
+    )
+    return (
+        pl.concat([parent.select(undivided.columns), undivided], how="vertical")
+        .unique(subset=["report_code"])
+        .sort("report_code")
+    )

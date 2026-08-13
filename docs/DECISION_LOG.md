@@ -716,3 +716,30 @@ belong in the adapter, alongside the existing `_assert_filters_applied` echo che
 
 Recorded now rather than discovered later, because the failure mode is a plausible number
 rather than an error.
+
+### 2026-08-13 · D037 · Year-versioned HMDA geography resolution **[AUTO]**
+Implements what D036 established. `omb_cbsa.vintage_for_hmda_year` and
+`omb_cbsa.hmda_geographies` resolve each analysis CBSA to the code HMDA will actually
+answer on **for that year**, and `hmda.fetch_msa` uses them.
+
+The year→vintage mapping is **empirical, not derived from an effective-date rule** — OMB
+bulletins reach HMDA with a lag this project could not find documented, and a wrong guess
+returns silent zeros:
+
+| HMDA year | vintage | how it was located |
+|---|---|---|
+| 2018 | 2017 | Chicago answers on division `16974`, present only in the 2015/2017 vintages |
+| 2019–2023 | 2018 | Chicago answers on `16984`; `16974` returns 0 from 2019 on |
+| 2024+ | 2023 | Atlanta division `12054` and Arlington `11694` appear; Atlanta CBSA `12060` and Washington division `47894` drop to 0 |
+
+Divisions are keyed back to their **parent CBSA** by shared counties — not by a code
+prefix, since division codes are not derived from their parent's — so the panel unit
+stays stable even though the queried code does not. Verified live: Boston `14454` →
+parent `14460`, Chicago `16984` → `16980`, undivided Atlanta and Phoenix pass through,
+all returning real counts.
+
+`_assert_metros_are_not_empty` is the guard that makes the whole thing safe to trust. A
+metropolitan area with zero purchase originations in a year is a failed lookup, not an
+observation, so more than 5% empty in **any single year** raises. The check is per-year
+on purpose: a wrong vintage boundary breaks exactly one span, and pooling across years
+would dilute a total failure in 2024 below any sensible threshold.
