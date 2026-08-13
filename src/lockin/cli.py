@@ -207,6 +207,21 @@ def fetch_public_data(config: ConfigOpt = "configs/sample.yaml") -> None:
     except Exception as exc:
         optional["teleworkable"] = f"FAILED · {type(exc).__name__}: {exc}"
 
+    # Metropolitan variants, fetched only when the run is actually at MSA geography:
+    # each costs real requests against a public service, and the state-level run has no
+    # use for them.
+    if cfg.panel.geography == "msa":
+        for label, fn in (
+            ("hmda_msa", lambda: hmda.fetch_msa(cfg)),
+            ("census_bps_metro", lambda: census_bps.fetch_metro(cfg)),
+            ("bls_laus_metro", lambda: bls_laus.fetch_metro(cfg)),
+        ):
+            try:
+                coverage, rows = fn()
+                optional[label] = f"ok · {rows:,} rows · {coverage}"
+            except Exception as exc:
+                optional[label] = f"FAILED · {type(exc).__name__}: {exc}"
+
     try:
         cw = omb_cbsa.fetch(cfg)
         optional["omb_cbsa"] = (

@@ -273,3 +273,193 @@ def try_load(cfg: Config) -> pl.DataFrame | None:
         return load(cfg)
     except (FileNotFoundError, Exception):
         return None
+
+
+# --- metropolitan geography ---------------------------------------------------
+#
+# Series identifier: ``LAUMT{state_fips}{cbsa}{00000}{measure}``, established by probing
+# rather than from documentation. Two properties of it matter enough to be stated here.
+#
+# **Metro LAUS is NOT seasonally adjusted.** ``LASMT...`` -- the seasonally adjusted
+# counterpart of the state series this module already fetches -- returns zero
+# observations for every metro tried. Only ``LAUMT`` (U = unadjusted) exists. The state
+# panel therefore uses an ADJUSTED rate and the metro panel an UNADJUSTED one, which are
+# not the same measurement. See :data:`METRO_SEASONALITY_NOTE`.
+#
+# **The identifier is prefixed by a state FIPS**, which is not well defined for the 47
+# metropolitan CBSAs that span more than one state. Rather than guess a rule -- principal
+# city? largest population? first alphabetically? -- every state the CBSA touches is
+# tried and whichever returns data is kept. Guessing here would produce empty series,
+# which look exactly like a metro with no labour force.
+
+METRO_FILENAME = "laus_metro_monthly.parquet"
+
+METRO_SEASONALITY_NOTE = (
+    "UNADJUSTED. BLS publishes no seasonally adjusted LAUS series at metropolitan level "
+    "(LASMT... returns nothing), while the state series used elsewhere in this project "
+    "IS adjusted. A monthly metro rate therefore carries a seasonal component the state "
+    "rate does not, and the two must never be pooled in one regression. The annual panel "
+    "averages twelve consecutive months, which removes most of the seasonality and is a "
+    "legitimate annual rate; the MONTHLY metro panel is not comparable to the monthly "
+    "state panel and is labelled accordingly."
+)
+
+
+def metro_series_id(state_fips: str, cbsa_code: str) -> str:
+    """LAUS metropolitan unemployment-rate series identifier (unadjusted, measure 03).
+
+    A LAUS identifier is ``LA`` + seasonal(1) + area type(2) + **area code(13)** +
+    measure(2) = 20 characters. The metropolitan area code is the state FIPS, the CBSA
+    code, and six trailing zeros. Getting the zero count wrong yields a 19-character id
+    that the API accepts and answers with an empty series -- indistinguishable from a
+    metro with no labour force, which is exactly the failure this adapter tries every
+    candidate state to avoid.
+    """
+    area_code = f"{state_fips}{cbsa_code}000000"
+    if len(area_code) != 13:
+        raise AdapterError(
+            f"LAUS area code must be 13 characters, got {len(area_code)} from "
+            f"state_fips={state_fips!r} cbsa={cbsa_code!r}"
+        )
+    return f"LAUMT{area_code}03"
+
+
+def _metro_candidates(cfg: Config) -> dict[str, list[str]]:
+    """``{cbsa_code: [candidate series ids]}`` -- one per state the CBSA spans."""
+    from lockin.adapters import omb_cbsa
+
+    cw = omb_cbsa.load_crosswalk(cfg).filter(
+        (pl.col("vintage") == omb_cbsa.DEFAULT_ANALYSIS_VINTAGE)
+        & (pl.col("code_kind") == "cbsa")
+        & (pl.col("cbsa_type") == "metro")
+    )
+    out: dict[str, list[str]] = {}
+    for row in (
+        cw.group_by("area_code")
+        .agg(pl.col("state_fips").unique().sort().alias("states"))
+        .iter_rows(named=True)
+    ):
+        out[str(row["area_code"])] = [
+            metro_series_id(str(sf), str(row["area_code"])) for sf in row["states"]
+        ]
+    return out
+
+
+def fetch_metro(cfg: Config, years: list[int] | None = None) -> tuple[str, int]:
+    """Fetch metropolitan unemployment rates. Optional, like the state series."""
+    years = years or cfg.panel.permits_years
+    lo, hi = min(years), max(years)
+    if hi - lo + 1 > MAX_YEARS_PER_QUERY:
+        raise AdapterError(
+            f"requested {hi - lo + 1} years, above the BLS unregistered limit of "
+            f"{MAX_YEARS_PER_QUERY}"
+        )
+    target = cache_path(cfg, "bls_laus", METRO_FILENAME)
+    if target.exists():
+        return _coverage_of(pl.read_parquet(target))
+    if cfg.offline:
+        raise OfflineError(f"offline=True and metro LAUS not cached at {target}")
+
+    candidates = _metro_candidates(cfg)
+    sid_to_cbsa = {sid: cbsa for cbsa, sids in candidates.items() for sid in sids}
+    all_sids = sorted(sid_to_cbsa)
+
+    rows: list[dict[str, Any]] = []
+    seen_cbsa: set[str] = set()
+    for i in range(0, len(all_sids), MAX_SERIES_PER_QUERY):
+        chunk = all_sids[i : i + MAX_SERIES_PER_QUERY]
+        body = {"seriesid": chunk, "startyear": str(lo), "endyear": str(hi)}
+        try:
+            resp = requests.post(
+                API,
+                data=json.dumps(body),
+                headers={"Content-Type": "application/json", "User-Agent": USER_AGENT},
+                timeout=120,
+            )
+        except requests.RequestException as exc:
+            raise AdapterError(f"BLS metro request failed: {type(exc).__name__}: {exc}") from exc
+        if resp.status_code != 200:
+            raise AdapterError(f"BLS metro HTTP {resp.status_code}: {resp.text[:200]}")
+        payload = resp.json()
+        if payload.get("status") != "REQUEST_SUCCEEDED":
+            raise AdapterError(
+                f"BLS metro status {payload.get('status')}: {payload.get('message')}"
+            )
+
+        for series in payload.get("Results", {}).get("series", []):
+            sid = series.get("seriesID", "")
+            cbsa = sid_to_cbsa.get(sid)
+            data = series.get("data", [])
+            if cbsa is None or not data:
+                continue
+            seen_cbsa.add(cbsa)
+            for obs in data:
+                period = obs.get("period", "")
+                if not period.startswith("M") or period == "M13":
+                    continue
+                try:
+                    value = float(obs["value"])
+                except (KeyError, ValueError):
+                    continue
+                rows.append(
+                    {
+                        "geography": cbsa,
+                        "series_id": sid,
+                        "year": int(obs["year"]),
+                        "month": int(period[1:]),
+                        "unemployment_rate": value,
+                    }
+                )
+
+    if not rows:
+        raise AdapterError("BLS metro LAUS returned no observations for any candidate series")
+
+    df = (
+        pl.DataFrame(rows)
+        .unique(subset=["geography", "year", "month"])
+        .with_columns(pl.date(pl.col("year"), pl.col("month"), 1).alias("period"))
+        .sort(["geography", "period"])
+    )
+    df.write_parquet(target)
+    coverage, n = _coverage_of(df)
+    write_manifest(
+        target,
+        name=f"{SPEC.name}_metro",
+        source=SPEC.source,
+        source_url=API,
+        license_terms=SPEC.license_terms,
+        redistribution_status=SPEC.redistribution_status,
+        schema_version="bls-api-v2-laus-metro-v1",
+        row_count=n,
+        geographic_level="CBSA",
+        coverage_period=coverage,
+        known_limitations=[*SPEC.known_limitations, METRO_SEASONALITY_NOTE],
+        data_class="PUBLIC",
+        extra={
+            "series_pattern": "LAUMT{state_fips}{cbsa}0000003 (metropolitan, NOT "
+            "seasonally adjusted, measure 03 = unemployment rate)",
+            "seasonally_adjusted": False,
+            "n_cbsa_resolved": len(seen_cbsa),
+            "n_cbsa_requested": len(candidates),
+            "multi_state_note": (
+                "the identifier carries a state FIPS that is ambiguous for multi-state "
+                "CBSAs, so every state the CBSA spans was tried and whichever returned "
+                "data was kept"
+            ),
+        },
+    )
+    return (coverage, n)
+
+
+def load_metro(cfg: Config) -> pl.DataFrame:
+    p = cache_path(cfg, "bls_laus", METRO_FILENAME)
+    if not p.exists():
+        raise FileNotFoundError(f"metro LAUS not cached at {p}. It is OPTIONAL.")
+    return pl.read_parquet(p)
+
+
+def try_load_metro(cfg: Config) -> pl.DataFrame | None:
+    try:
+        return load_metro(cfg)
+    except (FileNotFoundError, OSError):
+        return None

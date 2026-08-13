@@ -770,3 +770,31 @@ each adapter rather than left for the panel builder to trip over. HMDA carries
 
 Verified live on 2022: 384 metros, 12 months, and permit counts that behave the way the
 places do — Atlanta 25,961 single-family units against Chicago's 8,020.
+
+### 2026-08-13 · D039 · Metropolitan LAUS, and a self-inflicted silent-empty bug **[AUTO]**
+`bls_laus.fetch_metro` completes the third and last MSA adapter. All 393 metropolitan
+CBSAs resolve; 2021–22 rates behave as the places do (Los Angeles 6.40%, New York 6.01%,
+Chicago 5.42%, Atlanta 3.46%).
+
+**Metro LAUS is not seasonally adjusted, and the state series is.** `LASMT…` — the
+adjusted counterpart of the `LASST…` series this project already uses — returns zero
+observations for every metro tried; only `LAUMT…` exists. So the state panel carries an
+*adjusted* rate and the metro panel an *unadjusted* one. These are different
+measurements and must not be pooled. The annual panel averages twelve consecutive months,
+which removes most of the seasonality and is a legitimate annual rate; the **monthly**
+metro series is not comparable to the monthly state series and is labelled as such in
+`METRO_SEASONALITY_NOTE` and in the manifest.
+
+**The identifier carries a state FIPS, which is undefined for multi-state CBSAs** — 43 of
+the 393. Rather than guess the rule (principal city? largest share? first alphabetically?)
+every state the CBSA spans is tried and whichever answers is kept: 444 candidate series,
+18 API queries, inside the unregistered daily allowance.
+
+**And the first draft of it was wrong in exactly the way the adapter is designed to
+avoid.** `metro_series_id` emitted 19 characters — five trailing zeros where the area code
+needs six. BLS answers a malformed identifier with an **empty series, not an error**,
+which is indistinguishable from a metro with no labour force; every one of the 393 would
+have come back empty and the "try every state" logic would have reported that no state
+worked. Caught by comparing against the identifier verified live before any code was
+written. The function now asserts the 13-character area code, and a test pins both the
+length and the two verified identifiers.
