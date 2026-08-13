@@ -2172,6 +2172,13 @@ def render_technical(cfg: Config) -> Path:
 
 def render_all(cfg: Config) -> list[Path]:
     """Regenerate every report. Order matters only for readability of the log."""
+    # Stamp the reports directory with the profile that produced it. `reports/` is a
+    # shared path, so without this a reader -- or a governance test -- has no way to tell
+    # whether the markdown on disk came from a SYNTHETIC or a REGISTERED run, and would
+    # have to guess from whichever config it happened to load.
+    from lockin import dataset_stamp
+
+    dataset_stamp.write(cfg, cfg.path("reports"))
     return [
         render_loan_hazard(cfg),
         render_event_study(cfg),

@@ -6,23 +6,12 @@
 
 | | |
 |---|---|
-| Generated | `2026-08-13T09:34:48+00:00` |
-| Git commit | `2dbe7119f97f-dirty` |
-| Config | `sample` (digest `9fb71e2454f98608`) |
-| Data class | **SYNTHETIC** |
+| Generated | `2026-08-13T17:12:55+00:00` |
+| Git commit | `5d2e6a4a33f9-dirty` |
+| Config | `full` (digest `fa3707f77cbdb74a`) |
+| Data class | **REGISTERED** |
 | Data period | `2021-01..2024-12` |
 | Artifacts used | 11 |
-
-> ⚠️ **SYNTHETIC DATA.** The loan-level numbers in this report were computed from
-> synthetic fixtures generated for engineering tests (`lockin.fixtures`, seed
-> recorded in the manifest). They are **not** empirical findings about U.S.
-> mortgages — they recover the parameters of this repository's own
-> data-generating process. The public aggregate series in this report (Freddie Mac
-> PMMS, FHFA HPI, HMDA, Census Building Permits Survey) **are** real.
->
-> To produce empirical loan-level results, complete the registration in
-> `data/DATA_ACCESS.md` §R1 and re-run. See `AGENTS.md` §1 and
-> `data/LICENSE_AND_REDISTRIBUTION.md` §4.
 **Outcome vocabulary.** `prepayment` means Freddie Mac Zero Balance Code 01,
 *"Prepaid or Matured (Voluntary Payoff)"*. It conflates voluntary payoff with
 scheduled maturity and does **not** distinguish a refinance from a sale-related
@@ -31,10 +20,10 @@ source data supports either of those events, and this project never constructs o
 
 ## 1. Population and event construction
 
-- **10,500** loans; **2,369** prepayments, **113** credit events, **8,018** censored.
-- **8,575** loans are left truncated (median entry loan age 2.0 months). Risk sets exclude loans not yet observed at each age.
-- Estimation sample: 275,023 loan-months over `2021-01-01..2023-12-01`; out-of-time sample 93,066 loan-months over `2024-01-01..2024-12-01` (split at `2024-01`).
-- Sampling design: `full`.
+- **252,507** loans; **226,072** prepayments, **385** credit events, **26,050** censored.
+- **191,426** loans are left truncated (median entry loan age 15.0 months). Risk sets exclude loans not yet observed at each age.
+- Estimation sample: 4,011,824 loan-months over `2021-01-01..2023-12-01`; out-of-time sample 507,701 loan-months over `2024-01-01..2024-12-01` (split at `2024-01`).
+- Sampling design: `case-cohort applied AT EPISODE BUILD: all exit months retained, non-exit loans sampled by a stable hash of loan_seq_no`.
 
 **Event taxonomy** (from the official Zero Balance Code priority table):
 
@@ -48,23 +37,24 @@ source data supports either of those events, and this project never constructs o
 
 *Evidence tier: `descriptive`.*
 
-- Kaplan–Meier over 66 distinct exit ages; survival at the last observed age is **0.673**.
+- Kaplan–Meier over 142 distinct exit ages; survival at the last observed age is **0.000**.
 - treated as censoring -- gives the CAUSE-SPECIFIC survival function, NOT the probability of avoiding the event in the presence of competing causes
 
 Curves are stratified by the rate gap at first observation:
 
-  - entry gap <= -100bp (refi incentive)
   - entry gap -100 to 0bp
+  - entry gap <= -100bp (refi incentive)
   - entry gap 0 to +100bp
   - entry gap +100 to +200bp
+  - entry gap > +200bp (locked in)
 
 Stratifying controls for nothing: loans in different gap buckets were originated in different years to different borrowers at different LTVs.
 
 
 **Cumulative incidence** (Aalen–Johansen, not 1−KM):
 
-- prepayment: **0.3241**
-- credit event: **0.0153**
+- prepayment: **0.9990**
+- credit event: **0.0008**
 
 > 1 - KM overstates the probability of the event when a competing cause removes loans from the risk set.
 
@@ -74,46 +64,46 @@ Stratifying controls for nothing: loans in different gap buckets were originated
 
 ### Logit — prepayment
 
-269,811 loan-months, 2,116 events, 10,312 loans. Standard errors: clustered by loan_seq_no (10,312 clusters). AIC 22,703.1.
+3,808,045 loan-months, 187,401 events, 240,757 loans. Standard errors: clustered by loan_seq_no (240,757 clusters). AIC 51,098,880.8.
 
 | term | coef | s.e. | hazard ratio |
 |---|---|---|---|
-| `intercept` | -5.7719 | 0.7153 | 0.003 |
-| `rate_gap` | -0.5532 | 0.0198 | 0.575 |
-| `est_current_ltv` | 0.0015 | 0.0116 | 1.002 |
-| `credit_score` | -0.0002 | 0.0005 | 1.000 |
-| `orig_dti` | -0.0014 | 0.0024 | 0.999 |
-| `log_orig_upb` | 0.0908 | 0.0498 | 1.095 |
-| `orig_ltv` | 0.0014 | 0.0113 | 1.001 |
-| `hpi_growth_12m` | 0.1076 | 0.5819 | 1.114 |
+| `intercept` | -11.7634 | 0.0678 | 0.000 |
+| `rate_gap` | -0.2020 | 0.0018 | 0.817 |
+| `est_current_ltv` | -0.0091 | 0.0002 | 0.991 |
+| `credit_score` | 0.0000 | 0.0001 | 1.000 |
+| `orig_dti` | 0.0008 | 0.0003 | 1.001 |
+| `log_orig_upb` | 0.3681 | 0.0046 | 1.445 |
+| `orig_ltv` | 0.0064 | 0.0002 | 1.006 |
+| `hpi_growth_12m` | 0.5359 | 0.0563 | 1.709 |
 
-**Average marginal effect of the rate gap: -0.004264** — change in the MONTHLY probability of the outcome per 1 percentage point increase in the rate gap (market minus note), averaged over the sample.
+**Average marginal effect of the rate gap: -0.000527** — change in the MONTHLY probability of the outcome per 1 percentage point increase in the rate gap (market minus note), averaged over the sample.
 
 > ASSOCIATION, not causation. The rate gap is a deterministic function of the borrower's chosen note rate and the national rate path; borrowers with different note rates differ in cohort, credit, equity, and tenure.
 
 ### Complementary log-log — prepayment
 
-269,811 loan-months, 2,116 events, 10,312 loans. Standard errors: clustered by loan_seq_no (10,312 clusters). AIC 22,703.1.
+3,808,045 loan-months, 187,401 events, 240,757 loans. Standard errors: clustered by loan_seq_no (240,757 clusters). AIC 51,098,822.1.
 
 | term | coef | s.e. | hazard ratio |
 |---|---|---|---|
-| `intercept` | -5.7710 | 0.7090 | 0.003 |
-| `rate_gap` | -0.5503 | 0.0197 | 0.577 |
-| `est_current_ltv` | 0.0014 | 0.0115 | 1.001 |
-| `credit_score` | -0.0002 | 0.0005 | 1.000 |
-| `orig_dti` | -0.0014 | 0.0024 | 0.999 |
-| `log_orig_upb` | 0.0902 | 0.0494 | 1.094 |
-| `orig_ltv` | 0.0015 | 0.0112 | 1.002 |
-| `hpi_growth_12m` | 0.1190 | 0.5780 | 1.126 |
+| `intercept` | -11.7587 | 0.0677 | 0.000 |
+| `rate_gap` | -0.2018 | 0.0018 | 0.817 |
+| `est_current_ltv` | -0.0091 | 0.0002 | 0.991 |
+| `credit_score` | 0.0000 | 0.0001 | 1.000 |
+| `orig_dti` | 0.0008 | 0.0003 | 1.001 |
+| `log_orig_upb` | 0.3676 | 0.0046 | 1.444 |
+| `orig_ltv` | 0.0064 | 0.0002 | 1.006 |
+| `hpi_growth_12m` | 0.5357 | 0.0562 | 1.709 |
 
-**Average marginal effect of the rate gap: -0.004278** — change in the MONTHLY probability of the outcome per 1 percentage point increase in the rate gap (market minus note), averaged over the sample.
+**Average marginal effect of the rate gap: -0.000527** — change in the MONTHLY probability of the outcome per 1 percentage point increase in the rate gap (market minus note), averaged over the sample.
 
 > ASSOCIATION, not causation. The rate gap is a deterministic function of the borrower's chosen note rate and the national rate path; borrowers with different note rates differ in cohort, credit, equity, and tenure.
 
 ### Competing risk — credit events (cause-specific hazard)
 
-269,811 loan-months, 91 credit events.
-Rate-gap coefficient 0.0288 (s.e. 0.0794).
+3,808,045 loan-months, 193 credit events.
+Rate-gap coefficient 0.1855 (s.e. 0.0534).
 
 A cause-specific coefficient does not translate directly into an effect on cumulative incidence: a covariate can raise one cause-specific hazard while lowering the other cause's CIF.
 
@@ -123,13 +113,16 @@ A cause-specific coefficient does not translate directly into an effect on cumul
 
 | age bin | loan-months | events | hazard |
 |---|---|---|---|
-| `age_0_6` | 26,736 | 234 | 0.00875 |
-| `age_6_12` | 39,514 | 259 | 0.00655 |
-| `age_12_18` | 37,753 | 191 | 0.00506 |
-| `age_18_24` | 49,837 | 440 | 0.00883 |
-| `age_24_36` | 72,313 | 822 | 0.01137 |
-| `age_36_48` | 32,123 | 152 | 0.00473 |
-| `age_48_60` | 16,747 | 51 | 0.00305 |
+| `age_0_6` | 410,586 | 5,769 | 0.01405 |
+| `age_6_12` | 532,187 | 22,201 | 0.04172 |
+| `age_12_18` | 505,437 | 26,341 | 0.05212 |
+| `age_18_24` | 428,080 | 21,748 | 0.05080 |
+| `age_24_36` | 564,021 | 29,331 | 0.05200 |
+| `age_36_48` | 319,963 | 20,272 | 0.06336 |
+| `age_48_60` | 275,229 | 18,361 | 0.06671 |
+| `age_60_84` | 481,631 | 28,692 | 0.05957 |
+| `age_84_120` | 467,954 | 23,001 | 0.04915 |
+| `age_120_360` | 26,736 | 1,269 | 0.04746 |
 
 This age profile mixes genuine duration dependence with cohort and calendar-time composition and should not be read as pure seasoning.
 
@@ -137,14 +130,14 @@ This age profile mixes genuine duration dependence with cohort and calendar-time
 
 | rate-gap bucket | loan-months | events | hazard | mean gap (pp) |
 |---|---|---|---|---|
-| gap < -200bp (strong refi incentive) | 833 | 45 | 0.05402 | -2.14 |
-| -200 to -100bp | 26,013 | 704 | 0.02706 | -1.36 |
-| -100 to 0bp | 38,975 | 594 | 0.01524 | -0.45 |
-| 0 to +100bp | 38,136 | 350 | 0.00918 | 0.43 |
-| +100 to +200bp | 26,765 | 132 | 0.00493 | 1.55 |
-| +200 to +300bp | 49,777 | 178 | 0.00358 | 2.52 |
-| +300 to +400bp | 64,247 | 100 | 0.00156 | 3.50 |
-| gap > +400bp (deeply locked in) | 30,277 | 46 | 0.00152 | 4.42 |
+| gap < -200bp (strong refi incentive) | 120,158 | 8,302 | 0.06909 | -2.32 |
+| -200 to -100bp | 654,515 | 51,615 | 0.07886 | -1.40 |
+| -100 to 0bp | 991,436 | 58,677 | 0.05918 | -0.48 |
+| 0 to +100bp | 650,129 | 23,793 | 0.03660 | 0.39 |
+| +100 to +200bp | 370,268 | 14,404 | 0.03890 | 1.53 |
+| +200 to +300bp | 498,736 | 17,122 | 0.03433 | 2.50 |
+| +300 to +400bp | 518,394 | 16,666 | 0.03215 | 3.49 |
+| gap > +400bp (deeply locked in) | 208,188 | 6,406 | 0.03077 | 4.41 |
 
 The binned specification uses *0 to +100 bp* as the reference bucket, so each coefficient reads as 'relative to a barely locked-in loan'.
 
@@ -156,81 +149,81 @@ Pre-specified subgroups: initial note rate, loan age, current LTV, credit score,
 
 | group | loans | prepayments | monthly hazard | mean gap |
 |---|---|---|---|---|
-| high | 3,421 | 1,258 | 0.01464 | 0.60 |
-| low | 3,819 | 414 | 0.00395 | 2.54 |
-| mid | 3,260 | 477 | 0.00566 | 2.00 |
+| high | 97,308 | 81,449 | 0.06380 | -0.35 |
+| low | 69,009 | 46,092 | 0.03253 | 1.80 |
+| mid | 86,190 | 69,444 | 0.05268 | 0.77 |
 
 **loan_age_group**
 
 | group | loans | prepayments | monthly hazard | mean gap |
 |---|---|---|---|---|
-| 24-47m | 9,125 | 974 | 0.00933 | 1.92 |
-| 48m+ | 2,129 | 51 | 0.00305 | 2.92 |
-| <24m | 10,500 | 1,124 | 0.00731 | 1.55 |
+| 24-47m | 98,421 | 49,603 | 0.05611 | 1.23 |
+| 48m+ | 88,886 | 71,323 | 0.05699 | 0.40 |
+| <24m | 144,967 | 76,059 | 0.04054 | 0.82 |
 
 **est_ltv_group**
 
 | group | loans | prepayments | monthly hazard | mean gap |
 |---|---|---|---|---|
-| 60-80 | 6,770 | 1,223 | 0.00802 | 1.81 |
-| 80+ | 3,854 | 632 | 0.00793 | 1.63 |
-| <60 | 1,965 | 294 | 0.00688 | 1.91 |
+| 60-80 | 126,518 | 52,293 | 0.04874 | 0.59 |
+| 80+ | 36,830 | 4,404 | 0.01874 | 0.62 |
+| <60 | 194,265 | 140,288 | 0.05188 | 0.87 |
 
 **credit_score_group**
 
 | group | loans | prepayments | monthly hazard | mean gap |
 |---|---|---|---|---|
-| 700-759 | 4,954 | 1,018 | 0.00788 | 1.78 |
-| 760+ | 3,890 | 784 | 0.00765 | 1.76 |
-| <700 | 1,656 | 347 | 0.00800 | 1.77 |
+| 700-759 | 87,765 | 69,180 | 0.05069 | 0.70 |
+| 760+ | 124,076 | 96,157 | 0.04824 | 0.93 |
+| <700 | 40,666 | 31,648 | 0.04840 | 0.47 |
 
 **balance_group**
 
 | group | loans | prepayments | monthly hazard | mean gap |
 |---|---|---|---|---|
-| 200-400k | 4,606 | 967 | 0.00804 | 1.78 |
-| 400k+ | 619 | 144 | 0.00903 | 1.69 |
-| <200k | 5,275 | 1,038 | 0.00748 | 1.77 |
+| 200-400k | 109,686 | 86,773 | 0.05290 | 0.86 |
+| 400k+ | 35,252 | 27,070 | 0.05314 | 1.10 |
+| <200k | 107,569 | 83,142 | 0.04465 | 0.62 |
 
 **occupancy_status**
 
 | group | loans | prepayments | monthly hazard | mean gap |
 |---|---|---|---|---|
-| I | 746 | 171 | 0.00881 | 1.74 |
-| P | 9,428 | 1,915 | 0.00774 | 1.77 |
-| S | 326 | 63 | 0.00757 | 1.87 |
+| I | 18,919 | 15,085 | 0.05003 | -0.01 |
+| P | 223,836 | 174,283 | 0.04912 | 0.84 |
+| S | 9,752 | 7,617 | 0.04686 | 0.81 |
 
 **loan_purpose**
 
 | group | loans | prepayments | monthly hazard | mean gap |
 |---|---|---|---|---|
-| C | 2,087 | 409 | 0.00744 | 1.78 |
-| N | 3,597 | 733 | 0.00779 | 1.78 |
-| P | 4,816 | 1,007 | 0.00800 | 1.76 |
+| C | 55,607 | 42,797 | 0.04815 | 0.79 |
+| N | 90,765 | 70,947 | 0.04685 | 1.01 |
+| P | 106,135 | 83,241 | 0.05174 | 0.55 |
 
 > Subgroup hazards are DESCRIPTIVE within subgroup: they do not hold the other covariates fixed. A high-note-rate group differs from a low-note-rate group in origination year, credit, and equity as well as in the rate gap.
 
 ## 6. Cox proportional hazards and PH diagnostics
 
-10,121 loans, 2,150 events, concordance 0.6406.
+200,000 loans, 177,695 events, concordance 0.4025.
 
 > rate_gap_at_entry is FIXED at entry; a loan-level Cox cannot carry the time-varying gap. Prefer the discrete-time rungs for rate-gap inference.
 
 | term | coef | s.e. | hazard ratio | p |
 |---|---|---|---|---|
-| `rate_gap_at_entry` | -1.2163 | 0.0349 | 0.296 | 0.0000 |
-| `credit_score` | 0.0003 | 0.0005 | 1.000 | 0.5920 |
-| `orig_ltv` | 0.0015 | 0.0017 | 1.001 | 0.4014 |
-| `orig_dti` | -0.0015 | 0.0024 | 0.998 | 0.5227 |
+| `rate_gap_at_entry` | -0.2831 | 0.0033 | 0.753 | 0.0000 |
+| `credit_score` | 0.0005 | 0.0001 | 1.001 | 0.0000 |
+| `orig_ltv` | 0.0013 | 0.0001 | 1.001 | 0.0000 |
+| `orig_dti` | 0.0012 | 0.0003 | 1.001 | 0.0000 |
 
 **Proportional-hazards test** (Schoenfeld, rank transform):
 
 | covariate | statistic | p |
 |---|---|---|
-| `credit_score` | 0.60 | 0.4375 |
-| `orig_dti` | 1.62 | 0.2035 |
-| `orig_ltv` | 0.38 | 0.5371 |
-| `rate_gap_at_entry` | 382.81 | 0.0000 |
+| `credit_score` | 87.25 | 0.0000 |
+| `orig_dti` | 5.09 | 0.0240 |
+| `orig_ltv` | 112.51 | 0.0000 |
+| `rate_gap_at_entry` | 12,141.70 | 0.0000 |
 
 > small p-values indicate the proportional-hazards assumption is violated for that covariate
 
@@ -238,10 +231,10 @@ Pre-specified subgroups: initial note rate, loan age, current LTV, credit score,
 
 | metric | gradient boosting | discrete-time logit |
 |---|---|---|
-| out-of-time AUC | 0.5976 | 0.6166 |
-| out-of-time Brier | 0.002375 | 0.002347 |
+| out-of-time AUC | 0.6946 | 0.5174 |
+| out-of-time Brier | 0.050124 | 0.056516 |
 
-Train `2021-01-01..2023-12-01`, test `2024-01-01..2024-12-01`, test base rate 0.00235.
+Train `2021-01-01..2023-12-01`, test `2024-01-01..2024-12-01`, test base rate 0.05673.
 
 > Predictive performance is NOT evidence of causal identification. This rung exists only to show whether the discrete-time specification is leaving predictive signal unexploited.
 
@@ -287,16 +280,16 @@ A reader who wants the effect of lock-in on *moving* needs linked mortgage-and-p
 
 | dataset | schema@retrieved#checksum |
 |---|---|
-| `active_mortgage_stock` | `active-stock-v1@2026-08-13T09:32:43+00:00#f36e659e2b57` |
+| `active_mortgage_stock` | `active-stock-v1@2026-08-13T16:47:10+00:00#a256bff8ea10` |
 | `bls_laus` | `bls-api-v2-laus-state-v1@2026-08-11T17:41:19+00:00#8cd9335cc5ae` |
 | `census_bps` | `census-bps-state-monthly-v1@2026-08-13T09:27:18+00:00#d3e4a46f74a5` |
 | `fhfa_hpi` | `fhfa-hpi-master-v1@2026-08-13T09:25:46+00:00#8ab042e042ff` |
 | `freddie_llds_synthetic_fixtures` | `freddie-llds-2026-08-10@2026-08-13T09:29:56+00:00#68da95265c31` |
 | `hmda` | `cfpb-data-browser-aggregations-v2@2026-08-13T09:27:18+00:00#6946b46cf136` |
-| `loan_episodes` | `loan-episodes-v1@2026-08-13T09:32:34+00:00#5e658b4c1b59` |
-| `loan_events` | `loan-events-v1@2026-08-13T09:30:24+00:00#aada815c333d` |
-| `local_market_panel_annual` | `local-panel-v1@2026-08-13T09:32:43+00:00#d56df8b8380b` |
-| `local_market_panel_monthly` | `local-panel-v1@2026-08-13T09:32:43+00:00#c6946b128163` |
+| `loan_episodes` | `loan-episodes-v1@2026-08-13T17:07:29+00:00#ab7bd14c7982` |
+| `loan_events` | `loan-events-v1@2026-08-13T10:30:40+00:00#29799211d300` |
+| `local_market_panel_annual` | `local-panel-v1@2026-08-13T16:47:11+00:00#2ee1422e6608` |
+| `local_market_panel_monthly` | `local-panel-v1@2026-08-13T16:47:11+00:00#5a4a9c5fa6c7` |
 | `omb_cbsa_crosswalk` | `census-list1-v1@2026-08-13T09:27:19+00:00#222ea05e6b27` |
 | `omb_cbsa_stability` | `census-list1-v1@2026-08-13T09:27:19+00:00#30514ffa77ff` |
 | `pmms` | `pmms-history-v1@2026-08-13T09:25:46+00:00#c74cccece4a6` |

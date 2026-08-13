@@ -73,6 +73,16 @@ class SurvivalConfig:
     """<1.0 activates case-cohort sampling: all exit months are kept, non-exit
     months are sampled at this rate and carry an offset."""
     non_event_sample_fraction: float = 1.0
+    sample_at_episode_build: bool = False
+    """Apply the case-cohort sampling while WRITING episodes rather than after.
+
+    Off by default: for a sample-sized run the full episode table is small and worth
+    keeping, and sampling late leaves it available for other analyses. Turn it on when
+    the full episode table does not fit -- on the 40-cohort Standard dataset it is
+    ~522M loan-months, and materialising it exhausted the disk on a 17 GB / 228 GB
+    machine. The predicate is identical either way (a stable hash of ``loan_seq_no``,
+    all exit months retained), so the selected rows are the same; only the point at
+    which they are selected changes."""
     age_bin_edges: list[int] = field(
         default_factory=lambda: [0, 6, 12, 18, 24, 36, 48, 60, 84, 120, 360]
     )

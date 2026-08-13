@@ -114,7 +114,25 @@ def build_discrete_time(
     frac = float(cfg.survival.non_event_sample_fraction)
     design: dict[str, Any] = {"scheme": "full", "non_event_sample_fraction": 1.0}
 
-    if 0.0 < frac < 1.0:
+    already = bool(getattr(cfg.survival, "sample_at_episode_build", False))
+    if already and 0.0 < frac < 1.0:
+        # The identical predicate ran in lockin.episodes before the table was written,
+        # so re-applying it here would sample the survivors a SECOND time and quietly
+        # shrink the risk set to frac^2 of the population, while the weight below still
+        # said 1/frac. The rows are already the right rows; only the design record and
+        # the weight are still owed.
+        design = {
+            "scheme": "case-cohort applied AT EPISODE BUILD: all exit months retained, "
+            "non-exit loans sampled by a stable hash of loan_seq_no",
+            "non_event_sample_fraction": frac,
+            "seed": cfg.survival.seed,
+            "weight_column": "sampling_weight",
+            "applied_at": "episode_build",
+            "caveat": "Coefficients on time-varying covariates are consistent under "
+            "this design with the offset applied; the estimated BASELINE hazard "
+            "level is not directly interpretable without the weight.",
+        }
+    elif 0.0 < frac < 1.0:
         rng_seed = cfg.survival.seed
         lf = (
             lf.with_columns(
@@ -139,10 +157,24 @@ def build_discrete_time(
             "level is not directly interpretable without the weight.",
         }
 
+    # Inverse-probability weight. Two independent draws can have thinned the rows:
+    # a plain loan sample (everything, cases included) and the case-cohort filter
+    # (non-exiting loans only). A row's weight is the reciprocal of its total
+    # inclusion probability, so both have to appear here -- weighting only for the
+    # case-cohort draw would understate the population by 1/loan_frac.
+    loan_frac = float(getattr(cfg.survival, "loan_sample_fraction", 1.0))
+    if not (0.0 < loan_frac <= 1.0):
+        loan_frac = 1.0
+    base_w = 1.0 / loan_frac
+    design["loan_sample_fraction"] = loan_frac
+    design["weight_definition"] = (
+        "1 / P(included) = (1/loan_sample_fraction) for an exit month, and "
+        "(1/loan_sample_fraction) x (1/non_event_sample_fraction) otherwise"
+    )
     df = lf.with_columns(
         pl.when(pl.col("exit_any") == 1)
-        .then(1.0)
-        .otherwise(1.0 / max(frac, 1e-9))
+        .then(base_w)
+        .otherwise(base_w / max(frac, 1e-9))
         .alias("sampling_weight")
     ).collect(engine="streaming")
 

@@ -6,10 +6,10 @@
 
 | | |
 |---|---|
-| Generated | `2026-08-13T09:34:48+00:00` |
-| Git commit | `2dbe7119f97f-dirty` |
-| Config | `sample` (digest `9fb71e2454f98608`) |
-| Data class | **SYNTHETIC** |
+| Generated | `2026-08-13T17:12:55+00:00` |
+| Git commit | `5d2e6a4a33f9-dirty` |
+| Config | `full` (digest `fa3707f77cbdb74a`) |
+| Data class | **REGISTERED** |
 | Data period | `2021-01..2024-12` |
 | Artifacts used | 8 |
 
@@ -67,7 +67,7 @@ The layers answer different questions and are reported in separate files precise
 | HMDA (CFPB Data Browser) | applications and originations | purchase/refi activity, denial rate | public API |
 | Census BPS | permits authorized | construction outcome | public |
 
-This run: **10,500** loans, **275,023** estimation loan-months over `2021-01-01..2023-12-01`, **2,369** prepayments, **113** credit events, **8,018** censored, **8,575** left truncated.
+This run: **252,507** loans, **4,011,824** estimation loan-months over `2021-01-01..2023-12-01`, **226,072** prepayments, **385** credit events, **26,050** censored, **191,426** left truncated.
 
 **The population is not the market.** Conforming conventional Freddie Mac acquisitions only: no FHA/VA (which are *assumable*, so lock-in works differently there), no jumbo, no non-QM, no portfolio, no Fannie Mae, no all-cash purchases, and no mortgage-free owners. Full treatment in `reports/methodology_and_limitations.md` §3.
 
@@ -77,16 +77,16 @@ Monthly prepayment hazard by rate-gap bucket:
 
 | bucket | loan-months | hazard |
 |---|---|---|
-| gap < -200bp (strong refi incentive) | 833 | 0.05402 |
-| -200 to -100bp | 26,013 | 0.02706 |
-| -100 to 0bp | 38,975 | 0.01524 |
-| 0 to +100bp | 38,136 | 0.00918 |
-| +100 to +200bp | 26,765 | 0.00493 |
-| +200 to +300bp | 49,777 | 0.00358 |
-| +300 to +400bp | 64,247 | 0.00156 |
-| gap > +400bp (deeply locked in) | 30,277 | 0.00152 |
+| gap < -200bp (strong refi incentive) | 120,158 | 0.06909 |
+| -200 to -100bp | 654,515 | 0.07886 |
+| -100 to 0bp | 991,436 | 0.05918 |
+| 0 to +100bp | 650,129 | 0.03660 |
+| +100 to +200bp | 370,268 | 0.03890 |
+| +200 to +300bp | 498,736 | 0.03433 |
+| +300 to +400bp | 518,394 | 0.03215 |
+| gap > +400bp (deeply locked in) | 208,188 | 0.03077 |
 
-Discrete-time logit, 269,811 loan-months, 2,116 events, clustered by loan_seq_no (10,312 clusters): rate-gap coefficient **-0.5532** (s.e. 0.0198), hazard ratio **0.575** per pp, average marginal effect **-0.004264** per month.
+Discrete-time logit, 3,808,045 loan-months, 187,401 events, clustered by loan_seq_no (240,757 clusters): rate-gap coefficient **-0.2020** (s.e. 0.0018), hazard ratio **0.817** per pp, average marginal effect **-0.000527** per month.
 
 > ASSOCIATION, not causation. The rate gap is a deterministic function of the borrower's chosen note rate and the national rate path; borrowers with different note rates differ in cohort, credit, equity, and tenure.
 
@@ -98,15 +98,15 @@ $$E_g = \sum_k \omega_{gk}^{\text{pre}} \cdot \mathbf 1\{\bar R^{\text{post}} - 
 
 Frozen pre-shock coupon shares × the later national rate level. All cross-sectional variation is in the shares.
 
-Exposure `pre_locked_share_upb_200`: mean 0.8599, s.d. 0.0265, range [0.7873, 0.9173] across 25 states, standardised in every regression.
+Exposure `pre_locked_share_upb_200`: mean 0.8419, s.d. 0.0429, range [0.6657, 0.9143] across 54 states, standardised in every regression.
 
 | pre-period variable | correlation with exposure |
 |---|---|
-| `pre_hpi_growth_2019_2021` | -0.357 |
-| `pre_refi_count_2020_2021` | -0.021 |
-| `pre_wavg_note_rate_upb` | -0.604 |
-| `pre_n_active_loans` | 0.118 |
-| `median_est_current_ltv` | -0.037 |
+| `pre_hpi_growth_2019_2021` | 0.190 |
+| `pre_refi_count_2020_2021` | 0.003 |
+| `pre_wavg_note_rate_upb` | -0.955 |
+| `pre_n_active_loans` | 0.067 |
+| `median_est_current_ltv` | -0.517 |
 
 These correlations are the reason **no IV interpretation is claimed**. Predetermined ≠ exogenous.
 
@@ -114,24 +114,23 @@ Assumptions, threats, and the decision rule for causal language: `docs/IDENTIFIC
 
 ## 5. Market-level results
 
-Headline outcome: log HMDA purchase originations. Tier `quasi_experimental`; pre-trend p = 0.547 (passes at α = 0.10).
+Headline outcome: log HMDA purchase originations. Tier `descriptive`; pre-trend p = 0.000 (fails at α = 0.10).
 
-Collapsed DiD: **-0.0031** (s.e. 0.0185, t = -0.17, 25 clusters).
+Collapsed DiD: **-0.0238** (s.e. 0.0109, t = -2.18, 51 clusters).
 
 Every outcome, its dynamic path, pre-trends, and placebos: `reports/local_market_event_study.md`. Why quantities are unambiguous and prices are not: `reports/demand_supply_decomposition.md`.
 
 ## 6. Robustness
 
-42 specification cells; 6 flagged.
+42 specification cells; 3 flagged.
 
 | verdict | cells |
 |---|---|
-| `insignificant` | 30 |
-| `consistent` | 4 |
+| `consistent` | 29 |
+| `insignificant` | 7 |
+| `placebo_pass` | 3 |
 | `not_estimable` | 2 |
-| `sign_flip` | 2 |
-| `placebo_pass` | 2 |
-| `placebo_FAIL` | 2 |
+| `placebo_FAIL` | 1 |
 
 Cells vary the exposure definition, the bp threshold, the weighting (count vs UPB), the control set, sample exclusions (pandemic-boom and high-refi markets), the HMDA coverage regime, panel balance, placebo shock dates, and placebo outcomes.
 
@@ -141,12 +140,12 @@ Failures are enumerated in `reports/failed_hypotheses.md`, together with five ge
 
 | scenario | additional monthly prepayments | % change |
 |---|---|---|
-| no-lock-in counterfactual (bounding exercise) | 85.0 | 584.4% |
-| market mortgage rate declines | 29.2 | 201.1% |
-| existing mortgages become partially portable | 23.1 | 158.8% |
-| temporary seller credit | 21.3 | 146.4% |
-| existing mortgages become assumable under conditions | 11.1 | 76.4% |
-| market mortgage rate declines | 10.7 | 73.6% |
+| temporary seller credit | 536.4 | 1,041.7% |
+| no-lock-in counterfactual (bounding exercise) | 47.7 | 92.5% |
+| market mortgage rate declines | 25.6 | 49.6% |
+| existing mortgages become partially portable | 19.6 | 38.1% |
+| market mortgage rate declines | 11.5 | 22.3% |
+| mortgage-rate buydown | 11.5 | 22.3% |
 
 > This is a model-dependent projection, NOT a forecast. It holds the loan population, the composition of the housing stock, credit conditions, income, and migration fixed, and it applies a hazard relationship estimated on historical association as if it were a structural response function. It is not.
 
@@ -176,7 +175,7 @@ Every artifact records git commit, config digest, data period, and per-dataset `
 | `hazards/dt_logit_prepayment` | `hazard_association` | Loans in the ingested Freddie Mac Single-Family cohorts: conventional,… | loan-month, sampling weight applied |
 | `hazards/gap_profile_nonlinear` | `hazard_association` | Loans in the ingested Freddie Mac Single-Family cohorts: conventional,… | loan-month, sampling weight applied |
 | `eventstudy/exposure_distribution` | `descriptive` | U.S. states present in both the Freddie Mac loan sample and the public… | geography (unweighted) |
-| `eventstudy/es_log_purchase_originations` | `quasi_experimental` | U.S. states present in both the Freddie Mac loan sample and the public… | geography-year (unweighted OLS) |
+| `eventstudy/es_log_purchase_originations` | `descriptive` | U.S. states present in both the Freddie Mac loan sample and the public… | geography-year (unweighted OLS) |
 | `robustness/robustness_grid` | `quasi_experimental` | U.S. states present in both the Freddie Mac loan sample and the public… | geography-year (unweighted OLS), cluster |
 | `scenarios/scenario_comparison` | `simulation` | Active Freddie-acquired conforming conventional fixed-rate loans in th… | loan count and UPB |
 | `validation/validation_report` | `descriptive` | all ingested tables and cached public series… | n/a |
@@ -185,16 +184,16 @@ Every artifact records git commit, config digest, data period, and per-dataset `
 
 | dataset | schema@retrieved#checksum |
 |---|---|
-| `active_mortgage_stock` | `active-stock-v1@2026-08-13T09:32:43+00:00#f36e659e2b57` |
+| `active_mortgage_stock` | `active-stock-v1@2026-08-13T16:47:10+00:00#a256bff8ea10` |
 | `bls_laus` | `bls-api-v2-laus-state-v1@2026-08-11T17:41:19+00:00#8cd9335cc5ae` |
 | `census_bps` | `census-bps-state-monthly-v1@2026-08-13T09:27:18+00:00#d3e4a46f74a5` |
 | `fhfa_hpi` | `fhfa-hpi-master-v1@2026-08-13T09:25:46+00:00#8ab042e042ff` |
 | `freddie_llds_synthetic_fixtures` | `freddie-llds-2026-08-10@2026-08-13T09:29:56+00:00#68da95265c31` |
 | `hmda` | `cfpb-data-browser-aggregations-v2@2026-08-13T09:27:18+00:00#6946b46cf136` |
-| `loan_episodes` | `loan-episodes-v1@2026-08-13T09:32:34+00:00#5e658b4c1b59` |
-| `loan_events` | `loan-events-v1@2026-08-13T09:30:24+00:00#aada815c333d` |
-| `local_market_panel_annual` | `local-panel-v1@2026-08-13T09:32:43+00:00#d56df8b8380b` |
-| `local_market_panel_monthly` | `local-panel-v1@2026-08-13T09:32:43+00:00#c6946b128163` |
+| `loan_episodes` | `loan-episodes-v1@2026-08-13T17:07:29+00:00#ab7bd14c7982` |
+| `loan_events` | `loan-events-v1@2026-08-13T10:30:40+00:00#29799211d300` |
+| `local_market_panel_annual` | `local-panel-v1@2026-08-13T16:47:11+00:00#2ee1422e6608` |
+| `local_market_panel_monthly` | `local-panel-v1@2026-08-13T16:47:11+00:00#5a4a9c5fa6c7` |
 | `omb_cbsa_crosswalk` | `census-list1-v1@2026-08-13T09:27:19+00:00#222ea05e6b27` |
 | `omb_cbsa_stability` | `census-list1-v1@2026-08-13T09:27:19+00:00#30514ffa77ff` |
 | `pmms` | `pmms-history-v1@2026-08-13T09:25:46+00:00#c74cccece4a6` |

@@ -6,7 +6,7 @@
 
 | | |
 |---|---|
-| Generated | `2026-08-13T09:34:48+00:00` |
+| Generated | `2026-08-13T17:12:55+00:00` |
 | Git commit | `2dbe7119f97f-dirty` |
 | Config | `sample` (digest `9fb71e2454f98608`) |
 | Data class | **SYNTHETIC** |
@@ -87,7 +87,7 @@ Consequence for interpretation: a statement like "X% of loans are locked in abov
 - **Modifications** reset loan age per the official guide; the validator tolerates the reset and flags affected loans.
 - **Reappearing loans** (performance months after an exit) are truncated at the exit and flagged.
 
-In this run: 8,575 of 10,500 loans left truncated; 8,018 censored.
+In this run: 191,426 of 252,507 loans left truncated; 26,050 censored.
 
 ## 5. Frequency and index-concept discipline
 
@@ -99,7 +99,7 @@ In this run: 8,575 of 10,500 loans left truncated; 8,018 censored.
 
 ## 6. Treatment definition
 
-Exposure `pre_locked_share_upb_200`, frozen at `2021-12`, mean 0.8599, s.d. 0.0265 across 25 geographies. Standardised in every regression so coefficients read per standard deviation.
+Exposure `pre_locked_share_upb_200`, frozen at `2021-12`, mean 0.8419, s.d. 0.0429 across 54 geographies. Standardised in every regression so coefficients read per standard deviation.
 
 ## 7. Validation
 

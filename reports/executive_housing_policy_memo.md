@@ -6,23 +6,12 @@
 
 | | |
 |---|---|
-| Generated | `2026-08-13T09:34:48+00:00` |
-| Git commit | `2dbe7119f97f-dirty` |
-| Config | `sample` (digest `9fb71e2454f98608`) |
-| Data class | **SYNTHETIC** |
+| Generated | `2026-08-13T17:12:55+00:00` |
+| Git commit | `5d2e6a4a33f9-dirty` |
+| Config | `full` (digest `fa3707f77cbdb74a`) |
+| Data class | **REGISTERED** |
 | Data period | `2021-01..2024-12` |
 | Artifacts used | 9 |
-
-> ⚠️ **SYNTHETIC DATA.** The loan-level numbers in this report were computed from
-> synthetic fixtures generated for engineering tests (`lockin.fixtures`, seed
-> recorded in the manifest). They are **not** empirical findings about U.S.
-> mortgages — they recover the parameters of this repository's own
-> data-generating process. The public aggregate series in this report (Freddie Mac
-> PMMS, FHFA HPI, HMDA, Census Building Permits Survey) **are** real.
->
-> To produce empirical loan-level results, complete the registration in
-> `data/DATA_ACCESS.md` §R1 and re-run. See `AGENTS.md` §1 and
-> `data/LICENSE_AND_REDISTRIBUTION.md` §4.
 ## The ten questions
 
 ### 1. How is mortgage lock-in defined?
@@ -37,9 +26,9 @@ By initial note rate (the dominant driver — a low coupon *is* exposure):
 
 | note-rate tercile | loans | mean rate gap (pp) | mean payment gap ($/mo) |
 |---|---|---|---|
-| high | 3,421 | 0.60 | 73 |
-| low | 3,819 | 2.54 | 303 |
-| mid | 3,260 | 2.00 | 246 |
+| high | 97,308 | -0.35 | -30 |
+| low | 69,009 | 1.80 | 243 |
+| mid | 86,190 | 0.77 | 89 |
 
 Exposure is mechanically concentrated in the 2020–21 origination and refinance cohorts. Borrowers who transacted at the rate trough hold the largest gaps; borrowers who transacted before 2019 or after mid-2022 hold small or negative gaps.
 
@@ -51,18 +40,18 @@ Two groups are **structurally immune** and are invisible in any share we compute
 
 | rate-gap bucket | monthly prepayment hazard |
 |---|---|
-| gap < -200bp (strong refi incentive) | 0.05402 |
-| -200 to -100bp | 0.02706 |
-| -100 to 0bp | 0.01524 |
-| 0 to +100bp | 0.00918 |
-| +100 to +200bp | 0.00493 |
-| +200 to +300bp | 0.00358 |
-| +300 to +400bp | 0.00156 |
-| gap > +400bp (deeply locked in) | 0.00152 |
+| gap < -200bp (strong refi incentive) | 0.06909 |
+| -200 to -100bp | 0.07886 |
+| -100 to 0bp | 0.05918 |
+| 0 to +100bp | 0.03660 |
+| +100 to +200bp | 0.03890 |
+| +200 to +300bp | 0.03433 |
+| +300 to +400bp | 0.03215 |
+| gap > +400bp (deeply locked in) | 0.03077 |
 
-The most-locked-in bucket prepays at roughly **1/35.6** the rate of the most-refinance-incentivised bucket.
+The most-locked-in bucket prepays at roughly **1/2.2** the rate of the most-refinance-incentivised bucket.
 
-Conditional on loan age, credit score, DTI, LTV, balance, and local price growth, the discrete-time logit coefficient on the rate gap is **-0.5532** (s.e. 0.0198), a hazard ratio of **0.575** per percentage point.
+Conditional on loan age, credit score, DTI, LTV, balance, and local price growth, the discrete-time logit coefficient on the rate gap is **-0.2020** (s.e. 0.0018), a hazard ratio of **0.817** per percentage point.
 
 **Tier: `hazard_association`.** This is a conditional correlation, not a causal elasticity. The rate gap is a deterministic function of the note rate the borrower chose and the national rate path, and borrowers with different note rates differ in cohort, credit, equity, and tenure.
 
@@ -70,15 +59,15 @@ Conditional on loan age, credit score, DTI, LTV, balance, and local price growth
 
 ### 4. Does local lock-in exposure predict lower purchase-market activity?
 
-Log HMDA purchase originations: **-0.0002 per s.d. of exposure · tier `quasi_experimental` · pre-trend passes**.
+Log HMDA purchase originations: **0.0001 per s.d. of exposure · tier `descriptive` · pre-trend fails/untestable**.
 
-The collapsed pre/post estimate is -0.0031 (s.e. 0.0185, t = -0.17, 25 clusters) — **not statistically distinguishable from zero.**
+The collapsed pre/post estimate is -0.0238 (s.e. 0.0109, t = -2.18, 51 clusters) — statistically distinguishable from zero at 10%.
 
-The sign is negative, consistent with the mechanism, but with 25 state clusters and a within-sample exposure spread of only a fraction of a standard deviation in economic terms, this design has limited power. **A negative point estimate that does not clear conventional significance is not evidence of an effect, and it is not evidence against one either.**
+The sign is negative, consistent with the mechanism, but with 51 state clusters and a within-sample exposure spread of only a fraction of a standard deviation in economic terms, this design has limited power. **A negative point estimate that does not clear conventional significance is not evidence of an effect, and it is not evidence against one either.**
 
 ### 5. What happens to local prices?
 
-House price growth: **0.0038 per s.d. of exposure · tier `descriptive` · pre-trend passes**.
+House price growth: **-0.0007 per s.d. of exposure · tier `descriptive` · pre-trend passes**.
 
 **We do not assume a sign, and the theory does not give us one.** A locked-in owner withdraws from *both* sides of the market: they do not list, and they do not buy a replacement. The first raises prices, the second lowers them. The net effect depends on which side is more inelastic and on how much demand comes from first-time buyers and investors, who are not locked in at all.
 
@@ -86,7 +75,7 @@ This is why the decomposition report exists and why any confident public claim t
 
 ### 6. What happens to construction?
 
-Log single-family permits authorized: **-0.0153 per s.d. of exposure · tier `quasi_experimental` · pre-trend passes**.
+Log single-family permits authorized: **-0.0207 per s.d. of exposure · tier `quasi_experimental` · pre-trend passes**.
 
 Two channels point in opposite directions. If lock-in makes existing homes scarce and expensive, builders substitute toward new construction. If it suppresses trade-up demand, permits fall. Census BPS measures permits **authorized**, not starts and not completions, so even a clean estimate would be an intention rather than an outcome.
 
@@ -94,7 +83,7 @@ Two channels point in opposite directions. If lock-in makes existing homes scarc
 
 **Candidate causal evidence:** the continuous-treatment event studies on predetermined exposure, and **only** those outcomes whose pre-trend test passes and whose placebos are clean. The tier is assigned by the code from the diagnostics, not by an author's judgement — a failed pre-trend automatically demotes the artifact to `descriptive` with no override.
 
-Even where pre-trends pass, exposure is **not randomly assigned**: its correlation with `pre_wavg_note_rate_upb` is -0.60. Predetermined is not exogenous, and we use **no instrumental-variable language** anywhere.
+Even where pre-trends pass, exposure is **not randomly assigned**: its correlation with `pre_wavg_note_rate_upb` is -0.95. Predetermined is not exogenous, and we use **no instrumental-variable language** anywhere.
 
 What is *not* identified even in the best case: the **aggregate** effect of the national rate increase. The rate path is common to every geography and is absorbed by time fixed effects. This design can only speak to differences across exposure.
 
@@ -111,14 +100,14 @@ The loan-level and market-level results are deliberately reported in separate fi
 
 | scenario | modelled additional monthly prepayments | % change |
 |---|---|---|
-| no-lock-in counterfactual (bounding exercise) | 85.0 | 584.4% |
-| market mortgage rate declines | 29.2 | 201.1% |
-| existing mortgages become partially portable | 23.1 | 158.8% |
-| temporary seller credit | 21.3 | 146.4% |
-| existing mortgages become assumable under conditions | 11.1 | 76.4% |
-| market mortgage rate declines | 10.7 | 73.6% |
-| mortgage-rate buydown | 10.7 | 73.6% |
-| market mortgage rate declines | 4.6 | 31.8% |
+| temporary seller credit | 536.4 | 1,041.7% |
+| no-lock-in counterfactual (bounding exercise) | 47.7 | 92.5% |
+| market mortgage rate declines | 25.6 | 49.6% |
+| existing mortgages become partially portable | 19.6 | 38.1% |
+| market mortgage rate declines | 11.5 | 22.3% |
+| mortgage-rate buydown | 11.5 | 22.3% |
+| existing mortgages become assumable under conditions | 10.9 | 21.2% |
+| market mortgage rate declines | 5.5 | 10.6% |
 
 **Read the ordering, not the magnitudes.** These are `simulation`-tier projections and explicitly **not forecasts**. They apply a hazard *association* as if it were a structural response function, and the mapping into transactions, prices, and permits rests on calibrated elasticities with no error bars plus an **unidentified** prepayment-to-transaction share (reported across a range, never as a point value).
 
@@ -136,7 +125,7 @@ Three points a policy reader should take from the scenario set:
 4. **The population is doubly selected**: conforming conventional Freddie Mac acquisitions, within a mortgage market that itself excludes cash buyers and the roughly one third of owner-occupied homes with no mortgage.
 5. **The demand/supply decomposition is framed, not achieved.** No listings data, no transaction records, no household panel.
 6. **Low power at the state level.** 26 clusters and a narrow exposure spread.
-7. **Robustness:** 6 of 42 specification cells were flagged as sign flips, inestimable, or failing placebos. See `reports/failed_hypotheses.md`.
+7. **Robustness:** 3 of 42 specification cells were flagged as sign flips, inestimable, or failing placebos. See `reports/failed_hypotheses.md`.
 
 ---
 
@@ -158,7 +147,7 @@ Three points a policy reader should take from the scenario set:
 | `hazards/gap_profile_nonlinear` | `hazard_association` | Loans in the ingested Freddie Mac Single-Family cohorts: conventional,… | loan-month, sampling weight applied |
 | `hazards/dt_logit_prepayment` | `hazard_association` | Loans in the ingested Freddie Mac Single-Family cohorts: conventional,… | loan-month, sampling weight applied |
 | `hazards/heterogeneity` | `hazard_association` | Loans in the ingested Freddie Mac Single-Family cohorts: conventional,… | loan-month, sampling weight applied |
-| `eventstudy/es_log_purchase_originations` | `quasi_experimental` | U.S. states present in both the Freddie Mac loan sample and the public… | geography-year (unweighted OLS) |
+| `eventstudy/es_log_purchase_originations` | `descriptive` | U.S. states present in both the Freddie Mac loan sample and the public… | geography-year (unweighted OLS) |
 | `eventstudy/es_hpi_growth` | `descriptive` | U.S. states present in both the Freddie Mac loan sample and the public… | geography-year (unweighted OLS) |
 | `eventstudy/es_log_permits_1unit` | `quasi_experimental` | U.S. states present in both the Freddie Mac loan sample and the public… | geography-year (unweighted OLS) |
 | `eventstudy/exposure_distribution` | `descriptive` | U.S. states present in both the Freddie Mac loan sample and the public… | geography (unweighted) |
@@ -169,16 +158,16 @@ Three points a policy reader should take from the scenario set:
 
 | dataset | schema@retrieved#checksum |
 |---|---|
-| `active_mortgage_stock` | `active-stock-v1@2026-08-13T09:32:43+00:00#f36e659e2b57` |
+| `active_mortgage_stock` | `active-stock-v1@2026-08-13T16:47:10+00:00#a256bff8ea10` |
 | `bls_laus` | `bls-api-v2-laus-state-v1@2026-08-11T17:41:19+00:00#8cd9335cc5ae` |
 | `census_bps` | `census-bps-state-monthly-v1@2026-08-13T09:27:18+00:00#d3e4a46f74a5` |
 | `fhfa_hpi` | `fhfa-hpi-master-v1@2026-08-13T09:25:46+00:00#8ab042e042ff` |
 | `freddie_llds_synthetic_fixtures` | `freddie-llds-2026-08-10@2026-08-13T09:29:56+00:00#68da95265c31` |
 | `hmda` | `cfpb-data-browser-aggregations-v2@2026-08-13T09:27:18+00:00#6946b46cf136` |
-| `loan_episodes` | `loan-episodes-v1@2026-08-13T09:32:34+00:00#5e658b4c1b59` |
-| `loan_events` | `loan-events-v1@2026-08-13T09:30:24+00:00#aada815c333d` |
-| `local_market_panel_annual` | `local-panel-v1@2026-08-13T09:32:43+00:00#d56df8b8380b` |
-| `local_market_panel_monthly` | `local-panel-v1@2026-08-13T09:32:43+00:00#c6946b128163` |
+| `loan_episodes` | `loan-episodes-v1@2026-08-13T17:07:29+00:00#ab7bd14c7982` |
+| `loan_events` | `loan-events-v1@2026-08-13T10:30:40+00:00#29799211d300` |
+| `local_market_panel_annual` | `local-panel-v1@2026-08-13T16:47:11+00:00#2ee1422e6608` |
+| `local_market_panel_monthly` | `local-panel-v1@2026-08-13T16:47:11+00:00#5a4a9c5fa6c7` |
 | `omb_cbsa_crosswalk` | `census-list1-v1@2026-08-13T09:27:19+00:00#222ea05e6b27` |
 | `omb_cbsa_stability` | `census-list1-v1@2026-08-13T09:27:19+00:00#30514ffa77ff` |
 | `pmms` | `pmms-history-v1@2026-08-13T09:25:46+00:00#c74cccece4a6` |

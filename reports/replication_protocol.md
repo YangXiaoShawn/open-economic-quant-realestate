@@ -6,7 +6,7 @@
 
 | | |
 |---|---|
-| Generated | `2026-08-13T09:34:48+00:00` |
+| Generated | `2026-08-13T17:12:55+00:00` |
 | Git commit | `2dbe7119f97f-dirty` |
 | Config | `sample` (digest `9fb71e2454f98608`) |
 | Data class | **SYNTHETIC** |

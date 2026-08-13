@@ -6,23 +6,12 @@
 
 | | |
 |---|---|
-| Generated | `2026-08-13T09:34:48+00:00` |
-| Git commit | `2dbe7119f97f-dirty` |
-| Config | `sample` (digest `9fb71e2454f98608`) |
-| Data class | **SYNTHETIC** |
+| Generated | `2026-08-13T17:12:55+00:00` |
+| Git commit | `5d2e6a4a33f9-dirty` |
+| Config | `full` (digest `fa3707f77cbdb74a`) |
+| Data class | **REGISTERED** |
 | Data period | `2021-01..2024-12` |
 | Artifacts used | 6 |
-
-> ⚠️ **SYNTHETIC DATA.** The loan-level numbers in this report were computed from
-> synthetic fixtures generated for engineering tests (`lockin.fixtures`, seed
-> recorded in the manifest). They are **not** empirical findings about U.S.
-> mortgages — they recover the parameters of this repository's own
-> data-generating process. The public aggregate series in this report (Freddie Mac
-> PMMS, FHFA HPI, HMDA, Census Building Permits Survey) **are** real.
->
-> To produce empirical loan-level results, complete the registration in
-> `data/DATA_ACCESS.md` §R1 and re-run. See `AGENTS.md` §1 and
-> `data/LICENSE_AND_REDISTRIBUTION.md` §4.
 ## 1. The central asymmetry
 
 A locked-in owner is **both** a potential seller and a potential buyer. When the rate gap makes moving expensive, that household withdraws from *both* sides of the market at once.
@@ -73,15 +62,15 @@ No sign is presumed. Each cell reports what the artifacts actually show, with th
 
 | outcome | mean post effect (per 1 s.d. exposure) | tier | pre-trend | reading |
 |---|---|---|---|---|
-| purchase originations (log) | -0.0002 | `quasi_experimental` | pass | reduced |
-| refinance originations (log) | 0.0495 | `quasi_experimental` | pass | increased |
-| house price growth | 0.0038 | `descriptive` | pass | describes |
-| single-family permits (log) | -0.0153 | `quasi_experimental` | pass | reduced |
-| multifamily 5+ permits (log) | -0.1143 | `descriptive` | fail | descriptive only — pre-trend fails or is untestable |
+| purchase originations (log) | 0.0001 | `descriptive` | fail | descriptive only — pre-trend fails or is untestable |
+| refinance originations (log) | -0.0689 | `descriptive` | fail | descriptive only — pre-trend fails or is untestable |
+| house price growth | -0.0007 | `descriptive` | pass | describes |
+| single-family permits (log) | -0.0207 | `quasi_experimental` | pass | reduced |
+| multifamily 5+ permits (log) | -0.0165 | `descriptive` | fail | descriptive only — pre-trend fails or is untestable |
 
 ## 4. The loan-level gradient that motivates the market-level design
 
-The monthly prepayment hazard falls from **0.05402** in the most-refinance-incentivised bucket to **0.00152** in the most-locked-in bucket — a ratio of roughly **35.6×**.
+The monthly prepayment hazard falls from **0.06909** in the most-refinance-incentivised bucket to **0.03077** in the most-locked-in bucket — a ratio of roughly **2.2×**.
 
 *Evidence tier: `hazard_association`.* This gradient is the borrower-level mechanism the market-level design is looking for. It is **not** itself evidence about listings, sales, moves, or prices.
 
@@ -96,8 +85,8 @@ The supply-elasticity scenario in the policy module exists to make this concrete
 
 | artifact | tier | population | weight |
 |---|---|---|---|
-| `eventstudy/es_log_purchase_originations` | `quasi_experimental` | U.S. states present in both the Freddie Mac loan sample and the public… | geography-year (unweighted OLS) |
-| `eventstudy/es_log_refi_originations` | `quasi_experimental` | U.S. states present in both the Freddie Mac loan sample and the public… | geography-year (unweighted OLS) |
+| `eventstudy/es_log_purchase_originations` | `descriptive` | U.S. states present in both the Freddie Mac loan sample and the public… | geography-year (unweighted OLS) |
+| `eventstudy/es_log_refi_originations` | `descriptive` | U.S. states present in both the Freddie Mac loan sample and the public… | geography-year (unweighted OLS) |
 | `eventstudy/es_hpi_growth` | `descriptive` | U.S. states present in both the Freddie Mac loan sample and the public… | geography-year (unweighted OLS) |
 | `eventstudy/es_log_permits_1unit` | `quasi_experimental` | U.S. states present in both the Freddie Mac loan sample and the public… | geography-year (unweighted OLS) |
 | `eventstudy/es_log_permits_5plus` | `descriptive` | U.S. states present in both the Freddie Mac loan sample and the public… | geography-year (unweighted OLS) |
@@ -107,16 +96,16 @@ The supply-elasticity scenario in the policy module exists to make this concrete
 
 | dataset | schema@retrieved#checksum |
 |---|---|
-| `active_mortgage_stock` | `active-stock-v1@2026-08-13T09:32:43+00:00#f36e659e2b57` |
+| `active_mortgage_stock` | `active-stock-v1@2026-08-13T16:47:10+00:00#a256bff8ea10` |
 | `bls_laus` | `bls-api-v2-laus-state-v1@2026-08-11T17:41:19+00:00#8cd9335cc5ae` |
 | `census_bps` | `census-bps-state-monthly-v1@2026-08-13T09:27:18+00:00#d3e4a46f74a5` |
 | `fhfa_hpi` | `fhfa-hpi-master-v1@2026-08-13T09:25:46+00:00#8ab042e042ff` |
 | `freddie_llds_synthetic_fixtures` | `freddie-llds-2026-08-10@2026-08-13T09:29:56+00:00#68da95265c31` |
 | `hmda` | `cfpb-data-browser-aggregations-v2@2026-08-13T09:27:18+00:00#6946b46cf136` |
-| `loan_episodes` | `loan-episodes-v1@2026-08-13T09:32:34+00:00#5e658b4c1b59` |
-| `loan_events` | `loan-events-v1@2026-08-13T09:30:24+00:00#aada815c333d` |
-| `local_market_panel_annual` | `local-panel-v1@2026-08-13T09:32:43+00:00#d56df8b8380b` |
-| `local_market_panel_monthly` | `local-panel-v1@2026-08-13T09:32:43+00:00#c6946b128163` |
+| `loan_episodes` | `loan-episodes-v1@2026-08-13T17:07:29+00:00#ab7bd14c7982` |
+| `loan_events` | `loan-events-v1@2026-08-13T10:30:40+00:00#29799211d300` |
+| `local_market_panel_annual` | `local-panel-v1@2026-08-13T16:47:11+00:00#2ee1422e6608` |
+| `local_market_panel_monthly` | `local-panel-v1@2026-08-13T16:47:11+00:00#5a4a9c5fa6c7` |
 | `omb_cbsa_crosswalk` | `census-list1-v1@2026-08-13T09:27:19+00:00#222ea05e6b27` |
 | `omb_cbsa_stability` | `census-list1-v1@2026-08-13T09:27:19+00:00#30514ffa77ff` |
 | `pmms` | `pmms-history-v1@2026-08-13T09:25:46+00:00#c74cccece4a6` |

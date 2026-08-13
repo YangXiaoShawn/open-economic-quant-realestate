@@ -576,3 +576,66 @@ redistribution status, which is what a manifest reader needs.
 left-truncated, and the diagnostic separates the two causes: 9.27 M enter in the first
 month of the performance window (a window artifact) rather than through Freddie Mac's
 acquisition lag. Ingest 8 minutes at ~2.05 M lines/s; 4.9 GB of Parquet.
+
+### 2026-08-13 · D033 · First fully empirical run, and the sampling that made it fit **[AUTO]**
+The whole pipeline now runs on the registered Freddie Mac Standard dataset. **36 of 37
+artifacts are stamped `REGISTERED`**; the loan-level numbers below are the first in this
+repository that are evidence rather than software verification.
+
+**Loan-level prepayment hazard — the headline empirical result.**
+Discrete-time logit, 3,808,045 loan-months, 187,401 prepayment events, standard errors
+clustered across **240,757 loans**:
+
+| | coef | s.e. | z | hazard ratio |
+|---|---|---|---|---|
+| `rate_gap` | **−0.2020** | 0.0018 | −112.2 | **0.8171** |
+
+Each additional percentage point of rate gap multiplies the monthly prepayment hazard by
+about **0.82** — roughly an 18% lower monthly exit hazard per point of lock-in. The
+complementary log-log link gives −0.1990 on the same data, and a 15% loan sample gave
+−0.1993 on 11.4M loan-months, so the estimate is stable across link function and sample
+size.
+
+Tier is `hazard_association`, not causal, and the vocabulary rules in `AGENTS.md` §1
+still bind: Zero Balance Code 01 pools voluntary payoff, sale-related payoff and
+maturity, so **this is an effect on mortgage exits, not on moves or home sales**.
+
+**Market-level — the pre-trends fail, and the tier system demoted them.**
+51 clusters now (real data covers every state plus DC), against 26 on fixtures:
+
+| outcome | DiD | s.e. | t | pre-trend p | tier |
+|---|---|---|---|---|---|
+| log purchase originations | −0.0238 | 0.0109 | −2.18 | **0.0000 FAIL** | `descriptive` |
+| log refinance originations | −0.0789 | 0.0269 | −2.93 | **0.0000 FAIL** | `descriptive` |
+| house price growth | −0.0040 | 0.0021 | −1.96 | 0.509 | `descriptive` (circularity guard) |
+| log single-family permits | −0.0264 | 0.0230 | −1.15 | 0.974 | `quasi_experimental` |
+| log 5+-unit permits *(placebo)* | +0.0302 | 0.0552 | +0.55 | **0.072 FAIL** | `descriptive` |
+| purchase denial rate *(placebo)* | −0.0019 | 0.0012 | −1.57 | **0.004 FAIL** | `descriptive` |
+
+The purchase-originations coefficient is now "significant" at t = −2.18 — **and must not
+be read causally**, because its pre-trend test fails at p < 0.0001. High- and low-exposure
+states were already diverging before the shock. The automatic demotion did exactly the
+job it was built for: the one outcome that passes its pre-trend, single-family permits,
+is also the one that is insignificant.
+
+**Why the run is sampled, and by how much.** Sized by **disk, not RAM**. Peak RSS across
+the ten hazard stages stayed under 7 GB, but Polars streaming scratch accumulates between
+stages: at a 15% loan sample it walked the disk from 76 GB free to 18 GB and falling
+before being stopped. The unsampled episode table is 90.6M loan-months and its dense
+design matrix is ~21.7 GB, which OOM-killed the estimator outright.
+
+`survival.loan_sample_fraction` was **documented as the knob for exactly this and never
+implemented** — its only appearance in the codebase was an error message advising the
+user to lower it, which would have done nothing. It now works: a plain random sample of
+loans, every month of each selected loan retained, applied at episode build. At 0.05 the
+episode table is 4,519,525 rows and the whole pipeline completes in minutes.
+
+Two draws now thin the data, so the inverse-probability weight is the reciprocal of the
+**total** inclusion probability: `1/loan_frac` for an exit month and
+`1/(loan_frac × non_event_frac)` otherwise. Weighting for only the case-cohort draw, as
+the code did before, would have understated the population by a factor of 20.
+
+**`reports/` is a shared path too.** A governance test asserted the synthetic banner by
+loading `configs/sample.yaml` and checking the markdown on disk — which belonged to
+whichever profile last rendered. `render_all` now stamps the reports directory, and the
+test asks the directory what produced it instead of assuming.

@@ -149,8 +149,15 @@ def test_synthetic_runs_render_the_banner() -> None:
     reports = sorted(cfg.path("reports").glob("*.md")) if cfg.path("reports").exists() else []
     if not reports:
         pytest.skip("no reports generated yet; run `make report`")
-    if cfg.data_class != "SYNTHETIC":
-        pytest.skip("this run used registered data")
+    # `reports/` is a shared path: the markdown on disk belongs to whichever profile
+    # last rendered, which need not be the config this test loaded. Ask the directory
+    # what produced it rather than assuming.
+    from lockin import dataset_stamp
+
+    stamp = dataset_stamp.read(cfg.path("reports"))
+    produced_by = stamp.get("data_class") if stamp else cfg.data_class
+    if produced_by != "SYNTHETIC":
+        pytest.skip(f"reports on disk were produced by a {produced_by} run")
     # Reports that consume no loan-level artifact legitimately have no banner; at
     # least the loan-level ones must.
     must_have = [

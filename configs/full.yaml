@@ -58,8 +58,17 @@ lockin:
 
 survival:
   max_episode_rows: 800000000
-  loan_sample_fraction: 1.0
-  non_event_sample_fraction: 0.05   # case-cohort: all exit months kept, non-exit months sampled
+  # 5% random sample of LOANS, all their months kept. 15M loans -> ~750k, which is
+  # still a very large estimation sample. Sized by DISK, not RAM: the estimator's
+  # peak RSS is under 7 GB, but Polars streaming scratch accumulates across the ten
+  # hazard stages and at 15% it walked the disk from 76 GB free down to 18 GB and
+  # falling before the run was stopped.
+  loan_sample_fraction: 0.05
+  non_event_sample_fraction: 0.05
+  # Apply the case-cohort filter WHILE writing episodes, not after. The unsampled
+  # 40-cohort episode table is ~522M loan-months and materialising it exhausted the
+  # disk. Same predicate, same selected rows -- it just never builds the full table.
+  sample_at_episode_build: true
   age_bin_edges: [0, 6, 12, 18, 24, 36, 48, 60, 84, 120, 360]
   out_of_time_split: "2024-01"
   seed: 20260810

@@ -6,23 +6,12 @@
 
 | | |
 |---|---|
-| Generated | `2026-08-13T09:34:48+00:00` |
-| Git commit | `2dbe7119f97f-dirty` |
-| Config | `sample` (digest `9fb71e2454f98608`) |
-| Data class | **SYNTHETIC** |
+| Generated | `2026-08-13T17:12:55+00:00` |
+| Git commit | `5d2e6a4a33f9-dirty` |
+| Config | `full` (digest `fa3707f77cbdb74a`) |
+| Data class | **REGISTERED** |
 | Data period | `2021-01..2024-12` |
 | Artifacts used | 1 |
-
-> ⚠️ **SYNTHETIC DATA.** The loan-level numbers in this report were computed from
-> synthetic fixtures generated for engineering tests (`lockin.fixtures`, seed
-> recorded in the manifest). They are **not** empirical findings about U.S.
-> mortgages — they recover the parameters of this repository's own
-> data-generating process. The public aggregate series in this report (Freddie Mac
-> PMMS, FHFA HPI, HMDA, Census Building Permits Survey) **are** real.
->
-> To produce empirical loan-level results, complete the registration in
-> `data/DATA_ACCESS.md` §R1 and re-run. See `AGENTS.md` §1 and
-> `data/LICENSE_AND_REDISTRIBUTION.md` §4.
 > **No benchmark in this project may be labeled 'exact'. The leading lock-in papers use proprietary linked mortgage-and-property records or credit-bureau mobility panels. We have neither.**
 
 ## Comparison types
@@ -40,7 +29,7 @@
 
 ## fhfa_lockin_transactions
 
-**Comparison type: `blocked_by_synthetic_data`**
+**Comparison type: `conceptual`**
 
 - **Citation.** Federal Housing Finance Agency working-paper line of research on mortgage rate lock-in and housing-market transactions (Batzer, Coste, Doerner, Seiler and related FHFA working papers).
 - **Target estimand.** The reduction in the probability that a mortgaged owner sells, per unit of rate lock-in, and the implied aggregate reduction in home sales.
@@ -56,22 +45,19 @@
 **Our estimate.**
 
 - `quantity`: discrete-time logit coefficient on the point-in-time rate gap, prepayment outcome
-- `coef`: -0.5532
-- `std_err`: 0.0198
-- `hazard_ratio_per_1pp`: 0.5751
-- `average_marginal_effect_monthly`: -0.0043
+- `coef`: -0.2020
+- `std_err`: 0.0018
+- `hazard_ratio_per_1pp`: 0.8171
+- `average_marginal_effect_monthly`: -0.0005
 - `interpretation`: association between the rate gap and monthly PREPAYMENT, not sale and not mobility
 - `evidence_tier`: hazard_association
-- `data_class`: SYNTHETIC
-- `comparison_blocked`: Our side of this comparison was computed from SYNTHETIC fixtures. It recovers the parameters of our own data-generating process, so it CANNOT be compared to a published empirical estimate. The comparison becomes meaningful only after a registered-data run.
-
-> ⚠️ **Comparison blocked.** Our side of this comparison was computed from SYNTHETIC fixtures. It recovers the parameters of our own data-generating process, so it CANNOT be compared to a published empirical estimate. The comparison becomes meaningful only after a registered-data run.
+- `data_class`: REGISTERED
 
 ---
 
 ## fed_lockin_mobility
 
-**Comparison type: `blocked_by_synthetic_data`**
+**Comparison type: `conceptual`**
 
 - **Citation.** Federal Reserve Board / Federal Reserve Bank research on mortgage lock-in and household mobility (e.g. Fonseca and Liu; Fonseca, Liu and Mabille lines of work).
 - **Target estimand.** The causal effect of mortgage lock-in on household MOVING rates, and its general-equilibrium consequences.
@@ -90,16 +76,13 @@
 - `rows`: 8 rows in the artifact
 - `interpretation`: the SHAPE of this profile is what is comparable
 - `evidence_tier`: hazard_association
-- `data_class`: SYNTHETIC
-- `comparison_blocked`: Our side of this comparison was computed from SYNTHETIC fixtures. It recovers the parameters of our own data-generating process, so it CANNOT be compared to a published empirical estimate. The comparison becomes meaningful only after a registered-data run.
-
-> ⚠️ **Comparison blocked.** Our side of this comparison was computed from SYNTHETIC fixtures. It recovers the parameters of our own data-generating process, so it CANNOT be compared to a published empirical estimate. The comparison becomes meaningful only after a registered-data run.
+- `data_class`: REGISTERED
 
 ---
 
 ## prepayment_burnout_literature
 
-**Comparison type: `blocked_by_synthetic_data`**
+**Comparison type: `approximate`**
 
 - **Citation.** The mortgage-prepayment modelling literature (Schwartz-Torous onward, and industry prepayment models).
 - **Target estimand.** The response of the monthly prepayment hazard to the refinance incentive, plus seasoning, burnout, and turnover components.
@@ -117,16 +100,13 @@
 - `status`: no extractor for 'empirical hazard by bucket'
 - `available_keys`: ['gap_bucket_labels', 'prepayment']
 - `evidence_tier`: hazard_association
-- `data_class`: SYNTHETIC
-- `comparison_blocked`: Our side of this comparison was computed from SYNTHETIC fixtures. It recovers the parameters of our own data-generating process, so it CANNOT be compared to a published empirical estimate. The comparison becomes meaningful only after a registered-data run.
-
-> ⚠️ **Comparison blocked.** Our side of this comparison was computed from SYNTHETIC fixtures. It recovers the parameters of our own data-generating process, so it CANNOT be compared to a published empirical estimate. The comparison becomes meaningful only after a registered-data run.
+- `data_class`: REGISTERED
 
 ---
 
 ## hmda_purchase_activity
 
-**Comparison type: `blocked_by_synthetic_data`**
+**Comparison type: `approximate`**
 
 - **Citation.** Descriptive HMDA-based accounts of the 2022-2023 collapse in purchase and refinance origination volumes (CFPB HMDA data point reports and related FHFA/Fed commentary).
 - **Target estimand.** The change in purchase and refinance origination counts and volumes as rates rose.
@@ -144,11 +124,8 @@
 - `quantity`: event-study dynamic path for log refinance originations
 - `dynamic_effects`: 6 rows in the artifact
 - `status`: ok
-- `evidence_tier`: quasi_experimental
-- `data_class`: SYNTHETIC
-- `comparison_blocked`: Our side of this comparison was computed from SYNTHETIC fixtures. It recovers the parameters of our own data-generating process, so it CANNOT be compared to a published empirical estimate. The comparison becomes meaningful only after a registered-data run.
-
-> ⚠️ **Comparison blocked.** Our side of this comparison was computed from SYNTHETIC fixtures. It recovers the parameters of our own data-generating process, so it CANNOT be compared to a published empirical estimate. The comparison becomes meaningful only after a registered-data run.
+- `evidence_tier`: descriptive
+- `data_class`: REGISTERED
 
 ---
 
@@ -163,16 +140,16 @@
 
 | dataset | schema@retrieved#checksum |
 |---|---|
-| `active_mortgage_stock` | `active-stock-v1@2026-08-13T09:32:43+00:00#f36e659e2b57` |
+| `active_mortgage_stock` | `active-stock-v1@2026-08-13T16:47:10+00:00#a256bff8ea10` |
 | `bls_laus` | `bls-api-v2-laus-state-v1@2026-08-11T17:41:19+00:00#8cd9335cc5ae` |
 | `census_bps` | `census-bps-state-monthly-v1@2026-08-13T09:27:18+00:00#d3e4a46f74a5` |
 | `fhfa_hpi` | `fhfa-hpi-master-v1@2026-08-13T09:25:46+00:00#8ab042e042ff` |
 | `freddie_llds_synthetic_fixtures` | `freddie-llds-2026-08-10@2026-08-13T09:29:56+00:00#68da95265c31` |
 | `hmda` | `cfpb-data-browser-aggregations-v2@2026-08-13T09:27:18+00:00#6946b46cf136` |
-| `loan_episodes` | `loan-episodes-v1@2026-08-13T09:32:34+00:00#5e658b4c1b59` |
-| `loan_events` | `loan-events-v1@2026-08-13T09:30:24+00:00#aada815c333d` |
-| `local_market_panel_annual` | `local-panel-v1@2026-08-13T09:32:43+00:00#d56df8b8380b` |
-| `local_market_panel_monthly` | `local-panel-v1@2026-08-13T09:32:43+00:00#c6946b128163` |
+| `loan_episodes` | `loan-episodes-v1@2026-08-13T17:07:29+00:00#ab7bd14c7982` |
+| `loan_events` | `loan-events-v1@2026-08-13T10:30:40+00:00#29799211d300` |
+| `local_market_panel_annual` | `local-panel-v1@2026-08-13T16:47:11+00:00#2ee1422e6608` |
+| `local_market_panel_monthly` | `local-panel-v1@2026-08-13T16:47:11+00:00#5a4a9c5fa6c7` |
 | `omb_cbsa_crosswalk` | `census-list1-v1@2026-08-13T09:27:19+00:00#222ea05e6b27` |
 | `omb_cbsa_stability` | `census-list1-v1@2026-08-13T09:27:19+00:00#30514ffa77ff` |
 | `pmms` | `pmms-history-v1@2026-08-13T09:25:46+00:00#c74cccece4a6` |

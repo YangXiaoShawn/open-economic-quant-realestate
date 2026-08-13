@@ -23,6 +23,7 @@ full loan-by-month panel is never materialised as a Python object.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import date
 
 import polars as pl
@@ -119,6 +120,7 @@ def build_episodes(
     events: pl.DataFrame,
     monthly_rates: pl.DataFrame,
     hpi: pl.DataFrame | None = None,
+    cohort: str | None = None,
 ) -> pl.LazyFrame:
     """Assemble the loan-month episode table as a lazy plan.
 
@@ -134,7 +136,11 @@ def build_episodes(
         LTV and local price growth. When ``None``, ``est_current_ltv`` falls back to
         the balance-only scaling and ``ltv_source`` records that.
     """
-    perf = perf_mod.scan(cfg).select(
+    perf = perf_mod.scan(cfg)
+    if cohort is not None:
+        perf = perf.filter(pl.col("cohort") == cohort)
+        events = events.filter(pl.col("cohort") == cohort)
+    perf = perf.select(
         "loan_seq_no",
         "monthly_reporting_period",
         "current_upb",
@@ -335,30 +341,107 @@ def build_episodes(
         .alias("censored_this_month"),
     )
 
-    return lf.select([c for c in EPISODE_COLUMNS if c != "_"]).sort(["loan_seq_no", "period"])
+    lf = lf.select([c for c in EPISODE_COLUMNS if c != "_"]).sort(["loan_seq_no", "period"])
+    return _maybe_case_cohort_sample(cfg, lf)
 
 
-def write_episodes(cfg: Config, lf: pl.LazyFrame) -> tuple[object, int]:
-    """Collect (streaming) and write the episode table partitioned by period year."""
+def _maybe_case_cohort_sample(cfg: Config, lf: pl.LazyFrame) -> pl.LazyFrame:
+    """Optionally thin the episode table before it is written.
+
+    Two independent knobs, both applied at LOAN level because a loan's months are not
+    independent observations -- dropping a random subset of one loan's months would break
+    the ``.over("loan_seq_no")`` window functions and the risk-set construction.
+
+    ``loan_sample_fraction``
+        A plain random sample of loans, cases and non-cases alike, keeping every month of
+        each selected loan. This is the knob that controls how big the estimation problem
+        is. On the full Standard dataset the unsampled episode table is 90.6M rows even
+        after case-cohort thinning, and the dense design matrix the discrete-time models
+        build from it is ~21.7 GB -- more than the machine has, so the estimator was
+        killed with no traceback.
+
+    ``non_event_sample_fraction``
+        The case-cohort filter proper: within the sampled loans, every month of a loan
+        that ever exits is kept, and non-exiting loans are kept or dropped whole.
+
+    Both use a stable hash of ``loan_seq_no`` -- different salts, so the two selections
+    are independent -- which makes the sample reproducible without storing a row list,
+    and identical to the predicate ``lockin.survival.dataset`` would apply downstream.
+    """
+    if not cfg.survival.sample_at_episode_build:
+        return lf
+
+    loan_frac = float(cfg.survival.loan_sample_fraction)
+    event_frac = float(cfg.survival.non_event_sample_fraction)
+    seed = cfg.survival.seed
+    scale = 1_000_000
+
+    if 0.0 < loan_frac < 1.0:
+        lf = lf.filter(pl.col("loan_seq_no").hash(seed=seed).mod(scale) < int(loan_frac * scale))
+    if 0.0 < event_frac < 1.0:
+        keep_loan = pl.col("exit_any").max().over("loan_seq_no") == 1
+        # A different salt, so this draw is independent of the loan-sample draw above.
+        sampled = pl.col("loan_seq_no").hash(seed=seed + 1).mod(scale) < int(event_frac * scale)
+        lf = lf.filter(keep_loan | sampled)
+    return lf
+
+
+def write_episodes(
+    cfg: Config,
+    lf: pl.LazyFrame | None = None,
+    *,
+    build: Callable[[str | None], pl.LazyFrame] | None = None,
+    cohorts: list[str] | None = None,
+) -> tuple[object, int]:
+    """Collect and write the episode table, partitioned by period year.
+
+    Two modes. Passing ``lf`` collects that one plan -- fine for fixtures. Passing
+    ``build`` and ``cohorts`` instead builds and writes **one cohort at a time**, which
+    is what the full Standard dataset needs.
+
+    Why: ``collect()`` materialises the whole frame before anything is written, and the
+    episode table carries ~30 columns per loan-month. At 522 million loan-months that is
+    far beyond the 17 GB of RAM on this machine, and the process was killed by the OOM
+    reaper with no traceback -- a silent death that looks like a hang. Episodes are
+    per-loan (every window function is ``.over("loan_seq_no")``) and loans never span
+    cohorts, so per-cohort collection is exact, not an approximation.
+    """
     out_root = cfg.path("processed", "loan_episodes")
     out_root.mkdir(parents=True, exist_ok=True)
     for old in out_root.rglob("*.parquet"):
         old.unlink()
 
-    df = lf.collect(engine="streaming")
-    n = df.height
-    if n > cfg.survival.max_episode_rows:
-        raise RuntimeError(
-            f"episode table has {n:,} rows, above the configured budget of "
-            f"{cfg.survival.max_episode_rows:,}. Lower survival.loan_sample_fraction "
-            "or narrow the performance window."
-        )
-    for (year,), part in df.with_columns(pl.col("period").dt.year().alias("_y")).group_by(
-        ["_y"], maintain_order=True
-    ):
-        d = out_root / f"period_year={int(year)}"  # type: ignore[arg-type]
-        d.mkdir(parents=True, exist_ok=True)
-        part.drop("_y").write_parquet(d / "part-00000.parquet")
+    plans: list[tuple[str, pl.LazyFrame]] = []
+    if build is not None and cohorts:
+        plans = [(c, build(c)) for c in cohorts]
+    else:
+        plans = [("all", lf if lf is not None else pl.LazyFrame())]
+
+    n = 0
+    lo: date | None = None
+    hi: date | None = None
+    for tag, plan in plans:
+        df = plan.collect(engine="streaming")
+        n += df.height
+        if df.height:
+            p_lo, p_hi = df["period"].min(), df["period"].max()
+            lo = p_lo if lo is None or p_lo < lo else lo
+            hi = p_hi if hi is None or p_hi > hi else hi
+        if n > cfg.survival.max_episode_rows:
+            raise RuntimeError(
+                f"episode table has reached {n:,} rows, above the configured budget of "
+                f"{cfg.survival.max_episode_rows:,}. Lower survival.loan_sample_fraction "
+                "or narrow the performance window."
+            )
+        for (year,), part in df.with_columns(pl.col("period").dt.year().alias("_y")).group_by(
+            ["_y"], maintain_order=True
+        ):
+            d = out_root / f"period_year={int(year)}"  # type: ignore[arg-type]
+            d.mkdir(parents=True, exist_ok=True)
+            # One file per (year, cohort): a shared name would have each cohort
+            # overwrite the last, silently keeping only the final one.
+            part.drop("_y").write_parquet(d / f"part-{tag}.parquet")
+        del df
 
     write_manifest(
         out_root,
@@ -370,7 +453,7 @@ def write_episodes(cfg: Config, lf: pl.LazyFrame) -> tuple[object, int]:
         schema_version="loan-episodes-v1",
         row_count=n,
         geographic_level="loan-month (state)",
-        coverage_period=f"{df['period'].min()}..{df['period'].max()}",
+        coverage_period=f"{lo}..{hi}",
         known_limitations=[
             "One row per OBSERVED loan-month. Missing performance months are absent, "
             "so they contribute no risk time.",

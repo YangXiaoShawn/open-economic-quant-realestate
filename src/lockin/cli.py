@@ -324,8 +324,18 @@ def build_lockin_cmd(config: ConfigOpt = "configs/sample.yaml") -> None:
         hpi = None
 
     events = load_loan_events(cfg)
-    lf = build_episodes(cfg, events, rates, hpi)
-    path, n = write_episodes(cfg, lf)
+    # Build and write one cohort at a time. Collecting all cohorts at once
+    # materialises the whole episode table, which OOM-kills the process on the full
+    # Standard dataset. See lockin.episodes.write_episodes.
+    cohorts = sorted(set(events["cohort"].unique().to_list()))
+    if len(cohorts) > 1:
+        path, n = write_episodes(
+            cfg,
+            build=lambda c: build_episodes(cfg, events, rates, hpi, cohort=c),
+            cohorts=cohorts,
+        )
+    else:
+        path, n = write_episodes(cfg, build_episodes(cfg, events, rates, hpi))
     console.print(f"[green]✓[/] {n:,} loan-month episodes -> {path}")
     hard = _report_problems("episodes", validate_episodes(cfg))
     if hard:
