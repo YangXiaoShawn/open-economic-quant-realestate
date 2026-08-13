@@ -383,7 +383,7 @@ def write_episodes(cfg: Config, lf: pl.LazyFrame) -> tuple[object, int]:
             "PV financing gap uses CALIBRATED holding-period and discount-rate "
             "inputs, not estimated ones.",
         ],
-        data_class=cfg.data_class,
+        data_class=cfg.manifest_data_class,
         extra={
             "holding_period_months": cfg.lockin.holding_period_months,
             "discount_rate_pct": cfg.lockin.discount_rate_pct,

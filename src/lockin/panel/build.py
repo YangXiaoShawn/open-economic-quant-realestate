@@ -529,7 +529,7 @@ def build_local_panel(cfg: Config) -> tuple[pl.DataFrame, Path, list[str]]:
                 else f"{annual['year'].min()}..{annual['year'].max()}"
             ),
             known_limitations=limitations,
-            data_class=cfg.data_class,
+            data_class=cfg.manifest_data_class,
             extra={
                 "notes": notes,
                 "exposure_meta": exp_meta,

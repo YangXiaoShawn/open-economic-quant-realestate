@@ -162,6 +162,22 @@ class Config:
         """``SYNTHETIC`` or ``REGISTERED``. Drives report banners."""
         return "SYNTHETIC" if self.mortgage.mode == "synthetic" else "REGISTERED"
 
+    @property
+    def manifest_data_class(self) -> str:
+        """The same fact in the manifest's vocabulary.
+
+        Manifests classify data by *redistribution status* -- ``PUBLIC``, ``RESTRICTED``,
+        ``SYNTHETIC``, ``DERIVED`` -- while reports and the CLI say ``REGISTERED``,
+        which describes how it was obtained. For the Freddie Mac loan-level dataset the
+        two coincide: it is behind registration precisely because its licence forbids
+        redistribution, so it is ``RESTRICTED``.
+
+        Kept as a separate property rather than by widening the manifest vocabulary,
+        because a manifest reader asking "may I republish this?" should not have to know
+        that ``REGISTERED`` implies no.
+        """
+        return "RESTRICTED" if self.data_class == "REGISTERED" else self.data_class
+
     def path(self, key: str, *parts: str) -> Path:
         base = REPO_ROOT / getattr(self.paths, key)
         p = base.joinpath(*parts)

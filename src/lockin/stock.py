@@ -156,7 +156,7 @@ def build_active_stock(cfg: Config) -> tuple[pl.DataFrame, Path]:
             "causal work.",
             "Attrition over the window is reported in extra.coverage.",
         ],
-        data_class=cfg.data_class,
+        data_class=cfg.manifest_data_class,
         extra={"coverage": cov, "thresholds_bp": thr, "weights": ["loan_count", "current_upb"]},
     )
     return (agg, out)

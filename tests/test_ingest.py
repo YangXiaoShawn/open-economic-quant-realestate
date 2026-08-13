@@ -169,11 +169,39 @@ class TestOriginationParser:
         assert r["pre_relief_refi_loan_seq_no"] is None
 
     def test_ragged_line_does_not_crash(self) -> None:
-        """Real files contain the occasional truncated row."""
+        """Real files contain the occasional truncated row.
+
+        The layout variant is chosen from the MODAL field count over the head of the
+        chunk, not from ``lines[0]``, so one short row cannot select the wrong variant
+        for every row behind it.
+        """
         short = "|".join(["760", "202102", "N"])
         df = orig_mod.parse_chunk([_orig_line(), short])
         assert df.height == 2
-        assert len(df.columns) == 32
+        # Every documented column, plus the layout_variant provenance column.
+        assert set(ORIGINATION_COLUMNS).issubset(df.columns)
+        assert df["layout_variant"][0] == "documented_32_32"
+
+    def test_a_ragged_first_line_does_not_select_the_wrong_variant(self) -> None:
+        short = "|".join(["760", "202102", "N"])
+        df = orig_mod.parse_chunk([short, _orig_line(), _orig_line()])
+        assert df["layout_variant"][0] == "documented_32_32"
+
+    def test_observed_31_field_layout_is_parsed_with_its_own_names(self) -> None:
+        """The 2026 full set ships 31 origination fields, not the documented 32.
+
+        Fields 1-24 agree; after that the documented names would be off by one, so a
+        value of "N" would land in ``servicer_name``. See lockin.schemas.variants.
+        """
+        parts = _orig_line().split("|")
+        # Drop servicer name (25) and MI cancellation (32), as the shipped files do.
+        shipped = parts[:24] + parts[25:31] + ["9999"]
+        assert len(shipped) == 31
+        df = orig_mod.parse_chunk(["|".join(shipped)])
+        assert df["layout_variant"][0] == "observed_31_35"
+        assert df["seller_name"][0] == parts[23]
+        # Moved to the performance file, so absent here -- null, not mislabelled.
+        assert df["servicer_name"][0] is None
 
     def test_multiple_records(self) -> None:
         lines = [_orig_line(loan_seq_no=f"F20Q4000000{i}") for i in range(1, 6)]

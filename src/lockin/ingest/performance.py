@@ -23,6 +23,7 @@ from datetime import date
 
 import polars as pl
 
+from lockin import dataset_stamp
 from lockin.adapters import freddie_llds as llds
 from lockin.config import Config
 from lockin.manifest import write_manifest
@@ -57,6 +58,8 @@ KEEP: tuple[str, ...] = (
     "interest_bearing_upb",
 )
 
+from lockin.schemas import variants  # noqa: E402
+
 _FIELD_BY_NAME = {f.name: f for f in PERFORMANCE_FIELDS}
 
 
@@ -78,18 +81,58 @@ def _cast_expressions() -> list[pl.Expr]:
     return exprs
 
 
+def _modal_field_count(lines: list[str], sample: int = 200) -> int:
+    """Most common pipe-field count over the head of a chunk.
+
+    Taken from a sample rather than ``lines[0]`` so that a single ragged or truncated
+    line -- which real downloads do contain -- cannot pick the wrong layout variant for
+    an entire chunk.
+    """
+    counts: dict[int, int] = {}
+    for line in lines[:sample]:
+        n = line.count("|") + 1
+        counts[n] = counts.get(n, 0) + 1
+    return max(counts, key=lambda k: counts[k]) if counts else 0
+
+
+def _pad_ragged(lines: list[str], width: int) -> list[str]:
+    """Right-pad rows that are SHORT of the modal width.
+
+    Polars infers the frame width from the first row, so a truncated first line would
+    otherwise cap the whole chunk at its width and raise. Padding is only ever additive
+    -- the extra cells are empty strings, which the cast step turns into nulls, exactly
+    as a genuinely blank field is treated. Over-long rows are left to
+    ``truncate_ragged_lines``.
+    """
+    out = []
+    for line in lines:
+        short = width - (line.count("|") + 1)
+        out.append(line + "|" * short if short > 0 else line)
+    return out
+
+
 def parse_chunk(lines: list[str]) -> pl.DataFrame:
-    """Parse a chunk of raw performance lines, projecting to :data:`KEEP`."""
+    """Parse a chunk of raw performance lines, projecting to :data:`KEEP`.
+
+    The variant is chosen from the observed field count. Every column in :data:`KEEP`
+    sits in positions 1-32, which both known variants share, so the projection is
+    identical either way -- but the count is still checked rather than assumed, because
+    a layout that shifted the Zero Balance Code by one position would parse cleanly and
+    corrupt every event classification downstream.
+    """
+    n_fields = _modal_field_count(lines) or len(PERFORMANCE_COLUMNS)
+    variant = variants.variant_for_performance(n_fields)
+    columns = list(variant.performance_columns)
     raw = pl.read_csv(
-        io.StringIO("\n".join(lines)),
+        io.StringIO("\n".join(_pad_ragged(lines, n_fields))),
         separator="|",
         has_header=False,
         infer_schema_length=0,
         quote_char=None,
         truncate_ragged_lines=True,
-        new_columns=list(PERFORMANCE_COLUMNS),
+        new_columns=columns,
     )
-    for c in PERFORMANCE_COLUMNS:
+    for c in columns:
         if c not in raw.columns:
             raw = raw.with_columns(pl.lit(None, dtype=pl.Utf8).alias(c))
     return raw.select(list(KEEP)).with_columns(_cast_expressions())
@@ -118,6 +161,9 @@ def ingest(cfg: Config, cohorts: list[str] | None = None) -> dict[str, int]:
 
     lo, hi = _window(cfg)
     out_root = cfg.path("interim", "performance")
+    # Record which profile owns this directory, so a later run with a different
+    # mortgage mode cannot silently read it. See lockin.dataset_stamp.
+    dataset_stamp.write(cfg, out_root)
     counts: dict[str, int] = {}
 
     for lf in files:
@@ -183,6 +229,7 @@ def scan(cfg: Config) -> pl.LazyFrame:
     root = cfg.path("interim", "performance")
     if not root.exists():
         raise FileNotFoundError(f"{root} missing. Run `make ingest-mortgages`.")
+    dataset_stamp.check(cfg, root)
     return pl.scan_parquet(root / "**" / "*.parquet")
 
 

@@ -18,12 +18,14 @@ Nothing here writes to ``data/interim`` or ``data/processed``.
 
 from __future__ import annotations
 
+import contextlib
 import zipfile
 from dataclasses import dataclass, field
 from typing import Any
 
 from lockin.adapters import freddie_llds as llds
 from lockin.config import Config
+from lockin.schemas import variants
 from lockin.schemas.freddie import (
     ORIGINATION_COLUMNS,
     PERFORMANCE_COLUMNS,
@@ -114,28 +116,53 @@ def _probe(lf: llds.LoanFile, expected_fields: int, limit: int = PROBE_LINES) ->
 
 
 def run_preflight(cfg: Config) -> Preflight:
-    """Inspect whatever the user has placed in ``data/raw/freddie``."""
+    """Inspect whatever the user has placed under the raw data directory.
+
+    Searches the same locations as :func:`lockin.adapters.freddie_llds.discover` --
+    ``data/raw/freddie`` and ``data/raw`` itself -- because people put the download where
+    the browser left it. Preflight checking a narrower path than the ingester would tell
+    a user their data was missing while the ingester happily read it, or the reverse.
+    """
     pf = Preflight()
-    root = cfg.path("raw", "freddie")
+    preferred = cfg.path("raw", "freddie")
+    raw_root = cfg.path("raw")
 
-    if not root.exists():
+    if not preferred.exists() and not raw_root.exists():
         pf.add(
             "BLOCKER",
-            f"{root} does not exist. Create it and place the archives you downloaded "
-            "after completing registration. See data/DATA_ACCESS.md section R1.",
+            f"Neither {preferred} nor {raw_root} exists. Create one and place the "
+            "archives you downloaded after completing registration. See "
+            "data/DATA_ACCESS.md section R1.",
         )
         return pf
 
-    files = llds.discover(cfg, root=root)
+    files = llds.discover(cfg)
     if not files:
-        contents = sorted(p.name for p in root.iterdir())[:10]
+        looked = [d for d in (preferred, raw_root) if d.exists()]
+        contents = sorted({p.name for d in looked for p in d.iterdir()})[:10]
         pf.add(
             "BLOCKER",
-            f"No recognised Freddie Mac files under {root}. Found: {contents or 'nothing'}. "
-            "Expected either historical_data_YYYYQn.zip (full quarterly cohorts) or "
-            "sample_YYYY.zip (official sample files), unmodified.",
+            f"No recognised Freddie Mac files under {[str(d) for d in looked]}. Found: "
+            f"{contents or 'nothing'}. Expected historical_data_YYYYQn.zip, "
+            "sample_YYYY.zip, or the combined full-set archive, unmodified.",
         )
         return pf
+
+    # Only the cohorts this run will actually ingest are worth probing: the full set has
+    # 110 cohorts and probing all of them to report on 40 wastes the point of preflight.
+    wanted = set(cfg.mortgage.cohorts)
+    if wanted:
+        selected = [f for f in files if f.cohort in wanted]
+        if selected:
+            skipped = len(files) - len(selected)
+            files = selected
+            if skipped:
+                pf.add(
+                    "INFO",
+                    f"{skipped} member file(s) present but outside mortgage.cohorts and "
+                    "not probed. Cohort choice is a POPULATION RESTRICTION -- see the "
+                    "header of the run profile for its direction of bias.",
+                )
 
     pf.cohorts_origination = sorted({f.cohort for f in files if f.kind == "origination"})
     pf.cohorts_performance = sorted({f.cohort for f in files if f.kind == "performance"})
@@ -175,11 +202,25 @@ def run_preflight(cfg: Config) -> Preflight:
 
     # -- per-file probe ------------------------------------------------------
     total_bytes = 0
+    variants_seen: dict[str, int] = {}
     for lf in files:
         expected = (
             len(ORIGINATION_COLUMNS) if lf.kind == "origination" else len(PERFORMANCE_COLUMNS)
         )
         res = _probe(lf, expected)
+        # Report the count the DETECTED variant expects, not the documented one, or the
+        # table reads as 80 mismatches on a clean run.
+        try:
+            _v = (
+                variants.variant_for_origination(res.get("modal_field_count", 0))
+                if lf.kind == "origination"
+                else variants.variant_for_performance(res.get("modal_field_count", 0))
+            )
+            res["expected_field_count"] = (
+                _v.n_origination if lf.kind == "origination" else _v.n_performance
+            )
+        except variants.UnknownLayoutError:
+            pass
         size = _member_size(lf)
         total_bytes += size
         pf.files.append(
@@ -195,15 +236,27 @@ def run_preflight(cfg: Config) -> Preflight:
             pf.add("BLOCKER", f"{lf.describe()} could not be read: {res['error']}")
             continue
         modal = res["modal_field_count"]
-        if modal != expected:
+        # A field count is a BLOCKER only when it matches no layout variant this project
+        # has verified against the data. Freddie Mac's published documentation is
+        # currently behind the shipped files (32/32 documented, 31/35 shipped), so
+        # insisting on the documented count alone would reject the real dataset.
+        try:
+            v = (
+                variants.variant_for_origination(modal)
+                if lf.kind == "origination"
+                else variants.variant_for_performance(modal)
+            )
+            variants_seen[v.key] = variants_seen.get(v.key, 0) + 1
+            pf.files[-1]["layout_variant"] = v.key
+        except variants.UnknownLayoutError as exc:
             pf.add(
                 "BLOCKER",
-                f"{lf.describe()} has {modal} pipe-delimited fields, the verified layout "
-                f"expects {expected}. Freddie Mac may have changed the file layout. "
-                "Re-check file_layout.xlsx and update lockin/schemas/freddie.py, then "
-                "run `make emit-layout`. Do NOT ingest until this matches.",
+                f"{lf.describe()} has {modal} pipe-delimited fields, which matches no "
+                f"verified layout variant. {exc} Do NOT ingest until the layout is "
+                "re-verified against the data with a cross-file anchor.",
             )
-        elif len(res["field_counts"]) > 1:
+
+        if len(res["field_counts"]) > 1:
             pf.add(
                 "WARNING",
                 f"{lf.describe()} has ragged rows: field counts {res['field_counts']}. "
@@ -211,6 +264,26 @@ def run_preflight(cfg: Config) -> Preflight:
             )
         for code, k in res.get("zero_balance_codes", {}).items():
             pf.zb_codes_seen[code] = pf.zb_codes_seen.get(code, 0) + k
+
+    if len(variants_seen) > 1:
+        pf.add(
+            "WARNING",
+            f"more than one layout variant present: {variants_seen}. Each file is parsed "
+            "with its own variant, and every research variable sits in the positions the "
+            "variants share, so this is handled -- but mixing vintages in one run is "
+            "worth knowing about.",
+        )
+    for key, n in variants_seen.items():
+        v = variants.VARIANTS[key]
+        if v.inferred_fields or v.undocumented_positions:
+            pf.add(
+                "INFO",
+                f"{n} file(s) use layout {key}, which is NOT described by any published "
+                f"Freddie Mac document. Fields {list(v.inferred_fields)} are placed by "
+                f"INFERENCE from value domains and positions {list(v.undocumented_positions)} "
+                "are undocumented and never interpreted. No research variable depends on "
+                "either -- see lockin/schemas/variants.py.",
+            )
 
     # -- undocumented ZB codes ----------------------------------------------
     unknown = {c: n for c, n in pf.zb_codes_seen.items() if c.zfill(2) not in ZERO_BALANCE_CODES}
@@ -282,11 +355,28 @@ def run_preflight(cfg: Config) -> Preflight:
 
 
 def _member_size(lf: llds.LoanFile) -> int:
+    """Uncompressed size of the member, descending through any nesting.
+
+    Reads central directories only. Without the nesting walk this returned 0 for every
+    file in the combined full-set archive, which made the resource estimate report
+    "~0.0 GB" for a 40 GB input -- a reassuring number that was pure artifact.
+    """
     try:
-        if lf.archive is not None:
-            with zipfile.ZipFile(lf.archive) as zf:
-                return zf.getinfo(lf.member or "").file_size
-        return lf.path.stat().st_size if lf.path else 0
+        if lf.archive is None:
+            return lf.path.stat().st_size if lf.path else 0
+        handles: list[Any] = []
+        zf = zipfile.ZipFile(lf.archive)
+        handles.append(zf)
+        for inner in lf.nesting:
+            fh = zf.open(inner, "r")
+            handles.append(fh)
+            zf = zipfile.ZipFile(fh)
+            handles.append(zf)
+        size = zf.getinfo(lf.member or "").file_size
+        for h in reversed(handles):
+            with contextlib.suppress(Exception):
+                h.close()
+        return size
     except Exception:
         return 0
 

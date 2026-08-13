@@ -509,3 +509,70 @@ Result: `configs/msa.yaml` now stops with an actionable message naming the offen
 source and both key shapes. Remaining work is three adapters (HMDA `msamds`, Census BPS
 MSA files, BLS LAUS `LAUMT` series) plus a rule for the **47 metro CBSAs that span more
 than one state**. Recorded in `STATUS.md` §8.
+
+### 2026-08-13 · D031 · The shipped files do not match the published layout **[AUTO]**
+The registered download (`full_set_standard_historical_data.zip`, 40 GB, 110 quarterly
+cohorts 1999Q1–2026Q1) carries **31 origination and 35 performance fields**. Both
+official documents — `file_layout.xlsx` (Last-Modified 2024-04-08) and `user_guide.pdf`
+— describe **32 and 32**. The documentation is behind the data.
+
+Guessing a mapping from field names is exactly what `AGENTS.md` §3 forbids, so the
+layout was **established against the data** and every inference labelled by its support:
+
+- **Anchored.** Origination 1–24 and performance 1–32 confirmed by a cross-file join on
+  2021Q4: origination Original Interest Rate equals performance Current Interest Rate at
+  loan age 0 for **1,218 of 1,218** records, zero mismatches.
+- **Inferred (strong).** `Servicer Name` moved origination 25 → performance 34 (observed
+  values are servicer names). `MI Cancellation Indicator` moved origination 32 →
+  performance 33 (observed domain `{7, N, Y}` is the documented domain exactly).
+- **Undocumented.** Origination 31 (constant `9999`) and performance 35 (blank or
+  `0.00`) appear in no official document. Parsed as `undocumented_position_N`, never
+  interpreted, never renamed.
+
+The arithmetic closes on both files, which is what makes the account credible rather
+than merely possible: 32 − 2 + 1 = 31 and 32 + 2 + 1 = 35.
+
+**No research variable depends on an inferred or undocumented field** — all of them sit
+in the anchored range, and a test asserts that no research variable changes position
+between variants. `lockin.schemas.variants` selects the variant from the observed field
+count (modal over a sample, not `lines[0]`, so one truncated row cannot mis-select), and
+an unknown count is still a hard blocker.
+
+### 2026-08-13 · D032 · Three scaling defects the first real run exposed **[AUTO]**
+The 522-million-loan-month ingest surfaced problems that no synthetic run could.
+
+**1. Nested archives.** The full set is a zip of zips of zips
+(`full_set.zip → historical_data_YYYY.zip → historical_data_YYYYQn.zip → orig_/perf_*.txt`),
+and it uses the `orig_`/`perf_` naming rather than the documented
+`historical_data_`/`historical_data_time_`. `discover()` now recurses (depth-capped) and
+opens intermediate members **in place** as file objects. Nothing is extracted: the
+archive is 40 GB and the machine had 33 GB free. Reading is a seek, not a decompression,
+because the inner zips are stored uncompressed. Discovery of all 220 members takes 0.09 s.
+
+**2. A global sort that nearly filled the disk.** `build_loan_events` sorted all 522 M
+rows by `loan_seq_no`. It spilled ~20 GB of Polars scratch and took the disk from 26 GB
+free to **5.8 GB** before being stopped. The collapse is per-loan, loan sequence numbers
+encode their own cohort, and the interim tables are already hive-partitioned by cohort —
+so it is now done **one cohort at a time** and concatenated. Identical result, bounded
+scratch, and the step went from "spilling 20 GB after 9 minutes" to **61 seconds**.
+
+**3. `data/interim` is shared across run profiles.** Running a `sample` command after a
+`full` ingest reads the full dataset while stamping artifacts with the sample profile's
+digest and its `SYNTHETIC` data class — a licence problem as well as a provenance one.
+This is not hypothetical: it happened here, and triggered the same 522 M-row sort a
+second time. `lockin.dataset_stamp` now records the writing profile and readers refuse a
+mismatch. Unstamped directories pass, since pre-existing data is not evidence of a
+mismatch.
+
+Also fixed: `cfg.data_class` returns `REGISTERED`, which is not in the manifest
+vocabulary `{PUBLIC, RESTRICTED, SYNTHETIC, DERIVED}`, so **every manifest write in a
+registered run raised**. Never caught before because no registered run had ever reached
+that line. `cfg.manifest_data_class` maps it to `RESTRICTED` — the same fact, stated as
+redistribution status, which is what a manifest reader needs.
+
+**First real numbers.** 40 cohorts (2013Q1–2022Q4), performance filtered to
+2021-01…2024-12: **521,991,736 loan-months, 14,987,949 loans** — 4,529,704 prepayments
+(30.2%), 7,665 credit events (0.1%), 10,450,580 censored (69.7%). 56.6% of loans are
+left-truncated, and the diagnostic separates the two causes: 9.27 M enter in the first
+month of the performance window (a window artifact) rather than through Freddie Mac's
+acquisition lag. Ingest 8 minutes at ~2.05 M lines/s; 4.9 GB of Parquet.

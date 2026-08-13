@@ -121,10 +121,53 @@ def _censoring_reason_expr() -> pl.Expr:
     return e.otherwise(pl.lit("undocumented_zb_code")).alias("censoring_reason")
 
 
-def build_loan_events(cfg: Config) -> pl.DataFrame:
-    """Collapse the performance panel to one event row per loan and join origination."""
+def build_loan_events(cfg: Config, cohorts: list[str] | None = None) -> pl.DataFrame:
+    """Collapse the performance panel to one event row per loan and join origination.
+
+    Processed **one cohort at a time** and concatenated. The collapse is a global sort on
+    ``loan_seq_no`` followed by a per-loan aggregation, and on the full Standard dataset
+    that sort is over half a billion rows -- which spilled roughly 20 GB of Polars
+    scratch and came within 6 GB of filling the disk on a 522-million-row run before it
+    was stopped.
+
+    Partitioning is exact rather than approximate: a loan sequence number encodes its own
+    origination cohort (``F21Q4...``) and the interim tables are already hive-partitioned
+    by cohort, so no loan's rows ever span two partitions. Per-cohort results are
+    therefore identical to the single-pass result, and peak scratch is one cohort instead
+    of forty.
+    """
+    available = sorted(_available_cohorts(cfg))
+    wanted = [c for c in (cohorts or cfg.mortgage.cohorts or available) if c in available]
+    if not wanted:
+        wanted = available
+    if len(wanted) <= 1:
+        return _build_one(cfg, wanted[0] if wanted else None)
+
+    frames = [_build_one(cfg, c) for c in wanted]
+    frames = [f for f in frames if f.height]
+    if not frames:
+        return _build_one(cfg, None)
+    return pl.concat(frames, how="vertical_relaxed").sort("loan_seq_no")
+
+
+def _available_cohorts(cfg: Config) -> set[str]:
+    root = cfg.path("interim", "performance")
+    if not root.exists():
+        return set()
+    out: set[str] = set()
+    for p in root.glob("cohort=*"):
+        if p.is_dir():
+            out.add(p.name.split("=", 1)[1])
+    return out
+
+
+def _build_one(cfg: Config, cohort: str | None) -> pl.DataFrame:
+    """The original single-pass collapse, scoped to one cohort when given."""
     perf = perf_mod.scan(cfg)
     orig = orig_mod.scan(cfg).select(list(ORIGINATION_KEEP))
+    if cohort is not None:
+        perf = perf.filter(pl.col("cohort") == cohort)
+        orig = orig.filter(pl.col("cohort") == cohort)
 
     # Resolve the exit month per loan: the row carrying a ZB code, choosing by the
     # official priority table if (contrary to the guide) more than one exists.
@@ -377,7 +420,7 @@ def write_loan_events(cfg: Config, events: pl.DataFrame) -> tuple[Path, dict[str
             "acquisition process itself may be selective.",
             "Missing performance months contribute no risk time.",
         ],
-        data_class=cfg.data_class,
+        data_class=cfg.manifest_data_class,
         extra={"summary": summ},
     )
     return (out, summ)

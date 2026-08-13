@@ -74,14 +74,27 @@ KNOWN_LIMITATIONS = (
     "DTI is reported as Not Available above 65%, and for all HARP loans.",
 )
 
+# Freddie Mac has shipped several naming conventions. The ``orig_``/``perf_`` pair is
+# what the 2026 full-set download uses; the ``historical_data_``/``historical_data_time_``
+# pair is what the published documentation describes and what per-quarter archives use.
+# Both are accepted, and a file matching neither is ignored rather than guessed at.
 _ORIG_PATTERNS = (
     re.compile(r"^historical_data_(\d{4}Q\d)\.txt$", re.I),
+    re.compile(r"^orig_(\d{4}Q\d)\.txt$", re.I),
     re.compile(r"^sample_orig_(\d{4})\.txt$", re.I),
 )
 _PERF_PATTERNS = (
     re.compile(r"^historical_data_time_(\d{4}Q\d)\.txt$", re.I),
+    re.compile(r"^perf_(\d{4}Q\d)\.txt$", re.I),
     re.compile(r"^sample_svcg_(\d{4})\.txt$", re.I),
+    re.compile(r"^sample_perf_(\d{4})\.txt$", re.I),
 )
+
+#: How deep to follow zips inside zips. The 2026 full set is
+#: ``full_set.zip -> historical_data_YYYY.zip -> historical_data_YYYYQn.zip -> *.txt``,
+#: which is three levels. The cap stops a malformed or hostile archive from causing
+#: unbounded recursion.
+MAX_ARCHIVE_DEPTH: int = 4
 
 
 @dataclass(frozen=True, slots=True)
@@ -93,23 +106,45 @@ class LoanFile:
     archive: Path | None
     member: str | None
     path: Path | None
+    #: Intermediate zip members between ``archive`` and ``member``, outermost first.
+    #: Empty for a member sitting directly inside ``archive``.
+    nesting: tuple[str, ...] = ()
 
     def describe(self) -> str:
         if self.archive is not None:
-            return f"{self.archive.name}::{self.member}"
+            return "::".join((self.archive.name, *self.nesting, self.member or ""))
         return str(self.path)
 
     def open_text(self) -> IO[str]:
-        """Open the file as a text stream without extracting the whole archive."""
-        if self.archive is not None:
-            zf = zipfile.ZipFile(self.archive)
-            raw = zf.open(self.member or "", "r")
-            import io
+        """Open the file as a text stream **without extracting anything**.
 
-            return io.TextIOWrapper(raw, encoding="latin-1", errors="replace")
-        if self.path is None:
-            raise ValueError("LoanFile has neither archive nor path")
-        return self.path.open("r", encoding="latin-1", errors="replace")
+        Nested archives are opened in place: each intermediate member is handed to
+        ``zipfile.ZipFile`` as a file object rather than written to disk. The 2026 full
+        set stores its inner zips uncompressed, so this is a seek, not a decompression.
+        That matters -- the archive is 40 GB and the machine it is being read on does
+        not have room to expand it.
+        """
+        import io
+
+        if self.archive is None:
+            if self.path is None:
+                raise ValueError("LoanFile has neither archive nor path")
+            return self.path.open("r", encoding="latin-1", errors="replace")
+
+        # Keep every handle alive for the lifetime of the returned stream: closing an
+        # outer ZipFile invalidates the inner ones reading through it.
+        handles: list[object] = []
+        zf = zipfile.ZipFile(self.archive)
+        handles.append(zf)
+        for inner in self.nesting:
+            fh = zf.open(inner, "r")
+            handles.append(fh)
+            zf = zipfile.ZipFile(fh)
+            handles.append(zf)
+        raw = zf.open(self.member or "", "r")
+        wrapper = io.TextIOWrapper(raw, encoding="latin-1", errors="replace")
+        wrapper._lockin_handles = handles  # type: ignore[attr-defined]
+        return wrapper
 
 
 def _match(name: str, patterns: tuple[re.Pattern[str], ...]) -> str | None:
@@ -128,30 +163,67 @@ def discover(cfg: Config, root: Path | None = None) -> list[LoanFile]:
     completed registration, so callers can fall back to synthetic fixtures with a
     clear message.
     """
-    base = root or cfg.path("raw", "freddie")
-    if not base.exists():
-        return []
-
+    bases = [root] if root is not None else [cfg.path("raw", "freddie"), cfg.path("raw")]
     found: list[LoanFile] = []
-    for p in sorted(base.rglob("*")):
-        if p.is_dir():
+    seen: set[str] = set()
+
+    for base in bases:
+        if not base.exists():
             continue
-        if p.suffix.lower() == ".zip":
-            try:
-                with zipfile.ZipFile(p) as zf:
-                    for member in zf.namelist():
-                        if (c := _match(member, _ORIG_PATTERNS)) is not None:
-                            found.append(LoanFile("origination", c, p, member, None))
-                        elif (c := _match(member, _PERF_PATTERNS)) is not None:
-                            found.append(LoanFile("performance", c, p, member, None))
-            except zipfile.BadZipFile:
+        for p in sorted(base.rglob("*")):
+            if p.is_dir():
                 continue
-        elif p.suffix.lower() == ".txt":
-            if (c := _match(p.name, _ORIG_PATTERNS)) is not None:
-                found.append(LoanFile("origination", c, None, None, p))
-            elif (c := _match(p.name, _PERF_PATTERNS)) is not None:
-                found.append(LoanFile("performance", c, None, None, p))
-    return found
+            if p.suffix.lower() == ".zip":
+                try:
+                    with zipfile.ZipFile(p) as zf:
+                        _scan_archive(zf, p, (), found, depth=1)
+                except zipfile.BadZipFile:
+                    continue
+            elif p.suffix.lower() == ".txt":
+                if (c := _match(p.name, _ORIG_PATTERNS)) is not None:
+                    found.append(LoanFile("origination", c, None, None, p))
+                elif (c := _match(p.name, _PERF_PATTERNS)) is not None:
+                    found.append(LoanFile("performance", c, None, None, p))
+
+    # data/raw/freddie is normally inside data/raw, so the same file can be reached
+    # twice. De-duplicate on the fully qualified location.
+    unique: list[LoanFile] = []
+    for f in found:
+        key = f.describe()
+        if key not in seen:
+            seen.add(key)
+            unique.append(f)
+    return unique
+
+
+def _scan_archive(
+    zf: zipfile.ZipFile,
+    archive: Path,
+    nesting: tuple[str, ...],
+    found: list[LoanFile],
+    depth: int,
+) -> None:
+    """Recurse into an archive, descending into any zip members it contains.
+
+    Only central directories are read, never the payload, so scanning the 40 GB full set
+    costs a few seeks per archive rather than a decompression pass.
+    """
+    if depth > MAX_ARCHIVE_DEPTH:
+        return
+    for member in zf.namelist():
+        if (c := _match(member, _ORIG_PATTERNS)) is not None:
+            found.append(LoanFile("origination", c, archive, member, None, nesting))
+        elif (c := _match(member, _PERF_PATTERNS)) is not None:
+            found.append(LoanFile("performance", c, archive, member, None, nesting))
+        elif member.lower().endswith(".zip"):
+            try:
+                with zf.open(member, "r") as fh:
+                    if not fh.seekable():
+                        continue
+                    with zipfile.ZipFile(fh) as inner:
+                        _scan_archive(inner, archive, (*nesting, member), found, depth + 1)
+            except (zipfile.BadZipFile, OSError):
+                continue
 
 
 def files_for(cfg: Config, kind: FileKind, cohorts: list[str] | None = None) -> list[LoanFile]:

@@ -61,9 +61,13 @@ def _archive(root: Path, cohort: str, orig: list[str], perf: list[str]) -> None:
 
 
 def test_missing_directory_is_a_blocker(tmp_path: Path) -> None:
+    """Preflight searches the same places the ingester does: data/raw/freddie AND
+    data/raw itself, because people leave the download where the browser put it."""
     pf = run_preflight(_cfg(tmp_path))
     assert pf.n_blockers == 1
-    assert "does not exist" in pf.findings[0].message
+    msg = pf.findings[0].message
+    assert "exist" in msg
+    assert "raw" in msg
 
 
 def test_empty_directory_is_a_blocker(tmp_path: Path) -> None:
@@ -88,14 +92,37 @@ def test_well_formed_archive_passes(tmp_path: Path) -> None:
     assert all(f["modal_field_count"] == f["expected_field_count"] for f in pf.files)
 
 
-def test_wrong_field_count_is_a_blocker(tmp_path: Path) -> None:
-    """A Freddie Mac layout change must stop the run, not be parsed around."""
+def test_unknown_field_count_is_a_blocker(tmp_path: Path) -> None:
+    """A field count matching NO verified variant must stop the run.
+
+    Note what this does and does not assert. Freddie Mac ships more than one layout --
+    the documented 32/32 and the observed 31/35 of the 2026 full set -- so a count that
+    merely differs from the documented one is not by itself an error. A count matching
+    neither is, because the position of the Zero Balance Code would then be a guess.
+    """
     cfg = _cfg(tmp_path)
     truncated = "|".join(["x"] * 20)
     _archive(tmp_path / "raw" / "freddie", "2021Q4", [truncated] * 3, [_perf_line()])
     pf = run_preflight(cfg)
     assert pf.n_blockers >= 1
-    assert any("verified layout expects" in f.message for f in pf.findings)
+    assert any("matches no verified layout variant" in f.message for f in pf.findings)
+
+
+def test_the_shipped_31_35_layout_is_not_a_blocker(tmp_path: Path) -> None:
+    """The real full-set download must pass preflight, and say so loudly.
+
+    The published documentation describes 32/32; the shipped files are 31/35. Blocking
+    on that would reject the actual dataset, so the variant is accepted -- but because it
+    rests on inference rather than documentation, preflight reports that explicitly.
+    """
+    cfg = _cfg(tmp_path)
+    orig31 = "|".join(["x"] * 31)
+    perf35 = _perf_line().split("|")[:32] + ["N", "SOME SERVICER", ""]
+    _archive(tmp_path / "raw" / "freddie", "2021Q4", [orig31] * 3, ["|".join(perf35)])
+    pf = run_preflight(cfg)
+    assert pf.n_blockers == 0
+    assert any("NOT described by any published" in f.message for f in pf.findings)
+    assert all(f.get("layout_variant") == "observed_31_35" for f in pf.files)
 
 
 def test_undocumented_zero_balance_code_is_a_blocker(tmp_path: Path) -> None:
