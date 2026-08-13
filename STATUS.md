@@ -1,17 +1,20 @@
 # STATUS
 
-**Last updated:** 2026-08-13 (third pass) · config `sample`
+**Last updated:** 2026-08-13 (fourth pass) · config `full` — **REGISTERED data**
 
-> ⚠️ **Every estimate in this run is SYNTHETIC, including the market-level ones.** The
-> Freddie Mac Single-Family Loan-Level Dataset requires registration, which this
-> repository does not bypass. The loan stock is the only source of a local coupon
-> distribution, so **lock-in exposure — the treatment variable in every specification —
-> is synthetic**, even where the outcome series are real. Nothing here is an empirical
-> finding about U.S. housing. What is verified is the machinery: parsers, joins, event
-> rules, estimators, pre-trend logic, and the automatic tier demotion.
+> ✅ **This run uses the REAL Freddie Mac Single-Family Loan-Level Dataset.**
+> 36 of 37 artifacts are stamped `REGISTERED`. The loan-level estimates below are the
+> first in this repository that are **evidence** rather than software verification.
 >
-> The public aggregate series themselves (PMMS, FHFA HPI, HMDA, Census BPS, BLS LAUS,
-> OMB delineations, Dingel–Neiman) **are real** and are fetched live.
+> Two things still bind. **Tier:** loan-level results are `hazard_association`, not
+> causal. **Vocabulary:** Zero Balance Code 01 pools voluntary payoff, sale-related
+> payoff and maturity, so every result here is about **mortgage exits — not moves, not
+> home sales.** No mobility measure exists in these data.
+>
+> The run is **sampled**: a 5% random sample of loans (all months of each retained),
+> plus the case-cohort filter. Sized by disk, not RAM — see `DECISION_LOG` D033.
+> Cohorts are 2013Q1–2022Q4, which is a documented population restriction that
+> **overstates exposure** by dropping surviving high-coupon pre-2013 loans.
 
 ---
 
@@ -27,18 +30,21 @@ panel → exposure event study → automatically generated research memo.
 |---|---|
 | Pipeline stages | **19 / 19 OK** (`uv run lockin status`) |
 | Result artifacts | **37**, all with evidence tier + population + provenance |
-| Tests | **144 passed** (143 offline + 1 network), 0 failed |
+| Tests | **157 passed**, 1 skipped, 0 failed |
 | `ruff check` | clean |
 | `ruff format --check` | clean |
-| `mypy` | clean (45 source files; core interfaces strict) |
+| `mypy` | clean (47 source files; core interfaces strict) |
 | `make validate-data` | **0 hard**, 0 soft, 11 informational |
 | Generated reports | 10 |
 
-Artifacts by tier: `descriptive` 12 · `hazard_association` 8 · `quasi_experimental` 6 ·
-`simulation` 11.
+Artifacts by tier: `descriptive` 15 · `hazard_association` 8 · `quasi_experimental` 3 ·
+`simulation` 11. Data class: **36 REGISTERED**, 1 SYNTHETIC (a stale validation report).
 
-Milestones M0–M12 are complete. **M13 (full registered-data run) is BLOCKED** on user
-registration — see §7.
+The tier mix moved sharply against the causal reading when real data arrived —
+`quasi_experimental` fell from 6 to 3 — because real pre-trends fail where synthetic ones
+did not. That is the system working.
+
+Milestones M0–M13 are complete. **M13, the registered-data run, is DONE.**
 
 ---
 
@@ -46,7 +52,7 @@ registration — see §7.
 
 | source | real? | what was fetched |
 |---|---|---|
-| Freddie Mac loan-level | **no — SYNTHETIC** | 10,500 synthetic loans across cohorts 2019Q2 / 2020Q4 / 2021Q4; 368,341 loan-months over 2021-01…2024-12; seed `20260810` |
+| Freddie Mac loan-level | **YES — REGISTERED** | `full_set_standard_historical_data.zip` (40 GB, 110 cohorts 1999Q1–2026Q1), read **in place**, nothing extracted. Cohorts 2013Q1–2022Q4: **521,991,736 loan-months, 14,987,949 loans**; 4,529,704 prepayments, 7,665 credit events. Episodes sampled to 4,519,525 |
 | Freddie Mac PMMS | **yes** | `PMMS_history.csv`, 2,889 weekly observations, 1971-04-02…2026-08-06 |
 | FHFA HPI | **yes** | `hpi_master.csv`, 184,827 rows, 1975…2026; purchase-only, **quarterly**, State |
 | HMDA (CFPB Data Browser) | **yes** | 1,530 state-year-cell aggregations, 2018…2023, 51 states × 5 measures |
@@ -54,77 +60,64 @@ registration — see §7.
 | BLS LAUS (optional) | **yes** | 3,672 state-months, 2018-01…2023-12, seasonally adjusted unemployment rate via the public API |
 | FRED `MORTGAGE30US` | **no — failed** | optional cross-check; read timeout. Non-fatal, recorded |
 
-Loan-level schema **verified** against the public `file_layout.xlsx` and
-`user_guide.pdf`: 32 origination + 32 monthly performance fields, and the official
-Zero Balance Code termination-event priority table.
+Loan-level schema: the shipped files are **31 / 35 fields**, while both official
+documents describe **32 / 32**. The layout was established against the data, not the
+documentation — see `DECISION_LOG` D031 and `lockin/schemas/variants.py`. Anchored by a
+cross-file join (1,218 / 1,218 exact matches); two fields identified as *moved* by their
+value domains; two positions left **undocumented and never interpreted**. No research
+variable depends on an inferred or undocumented field, and a test enforces that.
 
 ---
 
-## 3. What the loan-level slice verifies (SYNTHETIC — not findings)
+## 3. Loan-level: the headline empirical result
 
-The synthetic DGP sets a **known** coefficient of `0.55` on the refinance incentive.
-The discrete-time logit recovers **−0.5248** (s.e. 0.0198, clustered across 10,320
-loans) on the rate gap — the same parameter with the opposite sign convention. **This
-is a successful software test of the estimator, not a fact about U.S. mortgages.**
+Discrete-time logit on the real dataset. **3,808,045 loan-months, 187,401 prepayment
+events, standard errors clustered across 240,757 loans.**
 
-- Events: 2,381 prepayments · 104 credit events · 8,015 censored, of 10,500 loans.
-- Left truncation: 8,551 loans (81.4%) enter at loan age > 1. Validation separates the
-  two causes — Freddie Mac acquisition lag versus the configured performance window.
-- Monotone hazard gradient across all eight rate-gap buckets (0.0377 → 0.0013 monthly),
-  which is the qualitative shape the prepayment literature reports.
-- Cox concordance 0.634. The PH diagnostic reports a large violation for
-  `rate_gap_at_entry` (p < 0.0001) — expected, and the reason the discrete-time rungs
-  with a *time-varying* gap are preferred.
-- Out-of-time AUC: gradient boosting 0.599 vs discrete-time logit 0.613. The
-  interpretable specification is not leaving predictive signal on the table.
+| | coef | s.e. | z | hazard ratio |
+|---|---|---|---|---|
+| `rate_gap` | **−0.2020** | 0.0018 | −112.2 | **0.8171** |
 
-## 4. The market-level slice — SYNTHETIC TREATMENT, real outcomes
+**Each additional percentage point of rate gap multiplies the monthly prepayment hazard
+by about 0.82** — roughly an 18% lower monthly exit hazard per point of lock-in.
 
-> **Read this before any number below.** The *outcomes* (HMDA, FHFA HPI, Census BPS, BLS
-> LAUS) are real. The **treatment is not**: lock-in exposure is computed from the
-> synthetic loan fixtures, because the Freddie Mac stock is the only source of a local
-> coupon distribution and it is behind registration. A difference-in-differences with a
-> synthetic treatment variable is **not an empirical finding of any kind** — it is a test
-> that the estimator, the joins, the pre-trend logic, and the tier demotion all work.
-> Earlier versions of this file headed this section "REAL public data", which was
-> misleading, and the artifacts themselves were always stamped `SYNTHETIC`.
+Stable across specification and sample size: complementary log-log gives −0.1990 on the
+same data, and a 15% loan sample gave −0.1993 on 11.4M loan-months.
 
-**What this run does demonstrate, and it is worth stating.** Regenerating the fixtures
-changed only the random assignment of loans to geographies. The purchase-originations
-estimate moved from +0.024 to −0.003, and the **denial-rate placebo went from t = −1.00
-to t = −2.78** — a "significant" placebo effect from a treatment that is, by
-construction, arbitrary noise. With 26 clusters and annual data, this design produces
-|t| > 2.5 on a placebo from reshuffling alone. That is the most useful thing the
-synthetic market-level slice has produced: a direct measurement of how little the
-cluster count supports.
+**What this is not.** It is an association, tiered `hazard_association`. It is about
+mortgage *exits*: ZB 01 does not distinguish a refinance from a sale-related payoff, so
+nothing here licenses a statement about household mobility.
 
-Exposure is the frozen 2021-12 coupon distribution evaluated at the later national rate
-path, across 25 states: mean 0.860, s.d. 0.027, range 0.787–0.917.
+## 4. Market-level: real treatment, real outcomes — and the pre-trends fail
+
+Exposure is now built from the **real** loan stock, across **51 clusters** (every state
+plus DC), against 26 on fixtures.
 
 | outcome | DiD (per 1 s.d.) | s.e. | t | pre-trend p | tier |
 |---|---|---|---|---|---|
-| log purchase originations | **−0.0031** | 0.0185 | −0.17 | 0.547 | `quasi_experimental` |
-| log refinance originations | +0.0228 | 0.0531 | +0.43 | 0.185 | `quasi_experimental` (contaminated) |
-| house price growth | +0.0025 | 0.0041 | +0.62 | 0.150 | `descriptive` (circularity guard) |
-| log single-family permits | −0.0108 | 0.0203 | −0.53 | 0.842 | `quasi_experimental` |
-| log 5+-unit permits *(placebo)* | −0.0372 | 0.0572 | −0.65 | **0.057 FAIL** | `descriptive` |
-| purchase denial rate *(placebo)* | −0.0023 | 0.0008 | **−2.78** | 0.840 | **placebo FAILS** |
+| log purchase originations | −0.0238 | 0.0109 | **−2.18** | **0.0000 FAIL** | `descriptive` |
+| log refinance originations | −0.0789 | 0.0269 | **−2.93** | **0.0000 FAIL** | `descriptive` (contaminated) |
+| house price growth | −0.0040 | 0.0021 | −1.96 | 0.509 | `descriptive` (circularity guard) |
+| log single-family permits | −0.0264 | 0.0230 | −1.15 | 0.974 | `quasi_experimental` |
+| log 5+-unit permits *(placebo)* | +0.0302 | 0.0552 | +0.55 | **0.072 FAIL** | `descriptive` |
+| purchase denial rate *(placebo)* | −0.0019 | 0.0012 | −1.57 | **0.004 FAIL** | `descriptive` |
 
-**The headline is a null, and the placebo fails.** Neither is evidence about U.S.
-housing, because the treatment is synthetic. Both are evidence about the *design*: a
-26-cluster annual panel cannot distinguish a real effect from a reshuffle.
+**The purchase-originations coefficient is "significant" at t = −2.18 and must not be
+read causally.** Its pre-trend test fails at p < 0.0001: high- and low-exposure states
+were already on diverging paths before the shock, so the parallel-trends assumption the
+design rests on is violated. The tier system demoted it automatically, with no manual
+override available.
 
-**Controls now actually bind.** Two predetermined characteristics —
-`pre_hpi_growth_2019_2021` and the new `teleworkable_share` — are time-invariant, so as
-level controls they were exactly collinear with the geography fixed effects and
-constrained nothing. Both now enter interacted with every period. `DECISION_LOG` D027
-decomposes the effect on the headline across five specifications; the null survived all
-five in the pre-regeneration fixtures.
+Note the pattern, which is the honest summary of this layer: **the only outcome that
+passes its pre-trend — single-family permits — is also the only one that is
+insignificant.** Nothing at the market level supports a causal lock-in claim.
 
-**House-price growth is demoted for a stated reason,** not a failed test. Its pre-trend
-control is built from the same FHFA series as its outcome, so the test cannot fail;
-`_circular_trend_controls` blocks promotion rather than accepting a p-value of 0.85 as
-reassurance.
+**Controls now actually bind.** `pre_hpi_growth_2019_2021` and `teleworkable_share` are
+time-invariant, so as level controls they were exactly collinear with the geography fixed
+effects and constrained nothing. Both now enter interacted with every period
+(`DECISION_LOG` D027). House-price growth is demoted for a *stated* reason rather than a
+failed test: its control is built from the same FHFA series as its outcome, so the
+pre-trend test cannot fail and its result carries no information.
 
 Robustness grid: **42 cells**. The eight added in the second pass — alternative
 pre-shock dates (2021-06, 2022-03), alternative rate series (`pmms15`), alternative HPI
@@ -207,20 +200,17 @@ Identification-threat status is now recorded **on every event-study artifact** u
 
 ---
 
-## 7. Blocked, and what unblocks it
+## 7. Done, and what it cost
 
-**M13 — full registered-data run.** Requires the user to register at the Freddie Mac
-Single-Family Loan-Level Dataset page and accept the terms of use. This repository
-will not bypass a registration or licence wall, and the terms prohibit redistributing
-the records.
+**M13 — registered-data run: COMPLETE.** The archive is read in place from
+`data/raw/full_set_standard_historical_data.zip`; nothing is extracted, because the
+archive is 40 GB and the machine had 33 GB free at the start.
 
-To proceed: follow `data/DATA_ACCESS.md` §R1, drop the archives in `data/raw/freddie/`,
-set `mortgage.mode: registered_sample` (or `registered_full`), and rerun.
-**No code changes are needed** — the adapter discovers
-`historical_data_YYYYQn.zip` / `sample_YYYY.zip` automatically, reads members without
-full extraction, and the `SYNTHETIC` stamps and report banners disappear on their own.
-
----
+Three defects only a real run could expose, all fixed (`DECISION_LOG` D032, D033):
+a global sort over 522M rows that spilled ~20 GB and nearly filled the disk; an episode
+table whose dense design matrix was 21.7 GB against 17 GB of RAM; and `data/interim`
+being shared across run profiles, so a `sample` command silently read `full` data and
+stamped the output `SYNTHETIC`.
 
 ## 8. Next milestones, in priority order
 
