@@ -233,11 +233,13 @@ def scan(cfg: Config) -> pl.LazyFrame:
     return pl.scan_parquet(root / "**" / "*.parquet")
 
 
-def validate(cfg: Config) -> list[str]:
-    """Performance-level validation checks. Returns human-readable problems."""
-    lf = scan(cfg)
-    problems: list[str] = []
+def _cohorts_on_disk(cfg: Config) -> list[str]:
+    root = cfg.path("interim", "performance")
+    return sorted(d.name.split("=", 1)[1] for d in root.glob("cohort=*") if d.is_dir())
 
+
+def _validate_one(lf: pl.LazyFrame) -> dict[str, int | list[str]]:
+    """Run every performance check over one partition and return raw counts."""
     dup = (
         lf.group_by(["loan_seq_no", "monthly_reporting_period"])
         .agg(pl.len().alias("n"))
@@ -246,11 +248,6 @@ def validate(cfg: Config) -> list[str]:
         .collect()
         .item()
     )
-    if dup:
-        problems.append(f"HARD: {dup} duplicate (loan_seq_no, monthly_reporting_period) pairs")
-
-    # A loan may carry a Zero Balance Code at most once (user guide, "Zero Balance
-    # Codes"). More than one is a hard error.
     multi_zb = (
         lf.filter(pl.col("zero_balance_code").is_not_null())
         .group_by("loan_seq_no")
@@ -260,14 +257,9 @@ def validate(cfg: Config) -> list[str]:
         .collect()
         .item()
     )
-    if multi_zb:
-        problems.append(f"HARD: {multi_zb} loans carry more than one Zero Balance Code")
-
-    # Loan age should be non-decreasing within a loan, EXCEPT across a
-    # modification, where the guide says loan age resets.
+    ordered = lf.sort(["loan_seq_no", "monthly_reporting_period"])
     age_regress = (
-        lf.sort(["loan_seq_no", "monthly_reporting_period"])
-        .with_columns(
+        ordered.with_columns(
             (pl.col("loan_age") - pl.col("loan_age").shift(1).over("loan_seq_no")).alias("d_age"),
             pl.col("modification_flag").is_in(["Y", "P"]).alias("modified"),
         )
@@ -276,15 +268,8 @@ def validate(cfg: Config) -> list[str]:
         .collect()
         .item()
     )
-    if age_regress:
-        problems.append(
-            f"SOFT: {age_regress} loan-months where loan_age decreased without a "
-            "modification flag (guide allows resets only on modification)"
-        )
-
     gaps = (
-        lf.sort(["loan_seq_no", "monthly_reporting_period"])
-        .with_columns(
+        ordered.with_columns(
             (
                 (
                     pl.col("monthly_reporting_period").dt.year() * 12
@@ -301,16 +286,7 @@ def validate(cfg: Config) -> list[str]:
         .collect()
         .item()
     )
-    if gaps:
-        problems.append(
-            f"SOFT: {gaps} within-loan month gaps in the performance series "
-            "(missing performance months; handled as unobserved risk time)"
-        )
-
     neg_upb = lf.filter(pl.col("current_upb") < 0).select(pl.len()).collect().item()
-    if neg_upb:
-        problems.append(f"HARD: {neg_upb} loan-months with negative current_upb")
-
     unknown_zb = (
         lf.filter(
             pl.col("zero_balance_code").is_not_null()
@@ -319,10 +295,69 @@ def validate(cfg: Config) -> list[str]:
         .select(pl.col("zero_balance_code").unique())
         .collect()
     )
-    if unknown_zb.height:
+    return {
+        "dup": dup,
+        "multi_zb": multi_zb,
+        "age_regress": age_regress,
+        "gaps": gaps,
+        "neg_upb": neg_upb,
+        "unknown_zb": unknown_zb["zero_balance_code"].to_list(),
+    }
+
+
+def validate(cfg: Config) -> list[str]:
+    """Performance-level validation checks. Returns human-readable problems.
+
+    Runs **one cohort at a time** and sums the counts. Every check here is per-loan --
+    duplicate loan-months, more than one Zero Balance Code, loan-age monotonicity, month
+    gaps -- and a loan sequence number encodes its own cohort, so no loan's rows ever
+    span two partitions. Per-cohort results are therefore identical to a single pass.
+
+    Why it matters: two of these checks sort the whole table by ``loan_seq_no``. On the
+    registered Standard dataset that is 522 million rows, and the single-pass version ran
+    for over thirty minutes without finishing while every other validation section
+    completed in under two (``DECISION_LOG`` D034). This is the same defect, and the same
+    fix, as the loan-event collapse in D032.
+    """
+    lf = scan(cfg)
+    cohorts = _cohorts_on_disk(cfg)
+    problems: list[str] = []
+
+    if len(cohorts) <= 1:
+        agg = _validate_one(lf)
+    else:
+        totals = {"dup": 0, "multi_zb": 0, "age_regress": 0, "gaps": 0, "neg_upb": 0}
+        codes: set[str] = set()
+        for c in cohorts:
+            r = _validate_one(lf.filter(pl.col("cohort") == c))
+            for k in totals:
+                totals[k] += int(r[k])  # type: ignore[arg-type]
+            codes.update(r["unknown_zb"])  # type: ignore[arg-type]
+        agg = {**totals, "unknown_zb": sorted(codes)}
+        problems.append(f"INFO: performance validated across {len(cohorts)} cohort partitions")
+
+    if agg["dup"]:
+        problems.append(
+            f"HARD: {agg['dup']} duplicate (loan_seq_no, monthly_reporting_period) pairs"
+        )
+    if agg["multi_zb"]:
+        problems.append(f"HARD: {agg['multi_zb']} loans carry more than one Zero Balance Code")
+    if agg["age_regress"]:
+        problems.append(
+            f"SOFT: {agg['age_regress']} loan-months where loan_age decreased without a "
+            "modification flag (guide allows resets only on modification)"
+        )
+    if agg["gaps"]:
+        problems.append(
+            f"SOFT: {agg['gaps']} within-loan month gaps in the performance series "
+            "(missing performance months; handled as unobserved risk time)"
+        )
+    if agg["neg_upb"]:
+        problems.append(f"HARD: {agg['neg_upb']} loan-months with negative current_upb")
+    if agg["unknown_zb"]:
         problems.append(
             "HARD: undocumented Zero Balance Code(s) present: "
-            f"{unknown_zb['zero_balance_code'].to_list()} -- do NOT guess their meaning; "
+            f"{agg['unknown_zb']} -- do NOT guess their meaning; "
             "check the current user guide and update lockin.schemas.freddie"
         )
     return problems

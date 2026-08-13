@@ -45,10 +45,20 @@ def sha256_file(path: Path, chunk: int = 1 << 20) -> str:
     return h.hexdigest()
 
 
+#: Sidecar files that describe a dataset directory rather than being part of it.
+#: They must be excluded from the directory digest, or writing one would invalidate
+#: the checksum of the data it describes.
+_NON_DATA_SIDECARS: tuple[str, ...] = (MANIFEST_SUFFIX, ".lockin_profile.json")
+
+
+def _is_data_file(x: Path) -> bool:
+    return x.is_file() and not any(tag in x.name for tag in _NON_DATA_SIDECARS)
+
+
 def sha256_dir(path: Path, pattern: str = "**/*") -> str:
     """Order-stable digest over a directory tree (for partitioned Parquet)."""
     h = hashlib.sha256()
-    for p in sorted(x for x in path.glob(pattern) if x.is_file() and MANIFEST_SUFFIX not in x.name):
+    for p in sorted(x for x in path.glob(pattern) if _is_data_file(x)):
         h.update(p.relative_to(path).as_posix().encode())
         h.update(sha256_file(p).encode())
     return h.hexdigest()

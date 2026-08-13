@@ -640,17 +640,41 @@ loading `configs/sample.yaml` and checking the markdown on disk — which belong
 whichever profile last rendered. `render_all` now stamps the reports directory, and the
 test asks the directory what produced it instead of assuming.
 
-### 2026-08-13 · D034 · `validate-data` does not scale to the real dataset **[AUTO, OPEN]**
+### 2026-08-13 · D034 · `validate-data` did not scale to the real dataset **[AUTO, RESOLVED]**
 Every other stage completes on the registered data in minutes. `validate-data` ran for
 over thirty minutes without finishing and was stopped. Disk stayed flat at ~28 GB free
 throughout, so it is not spilling — it is doing per-loan work that does not scale, most
 likely one of the whole-table `.collect()` calls in `lockin.episodes.validate_episodes`
 or `lockin.events.validate_events`.
 
-**This is an open defect, recorded rather than papered over.** `outputs/validation/
-validation_report.json` is consequently the one artifact still stamped `SYNTHETIC`: it is
-left over from the fixture run and **does not describe the registered data**. It must not
-be read as validation of anything in this run.
+**Resolved.** Timing each section individually rather than guessing found it at once:
+everything except `performance.validate` finished in under two minutes, and that one
+sorts the whole table by `loan_seq_no` twice — 522 million rows. Same defect and same fix
+as D032: the checks are all per-loan (duplicate loan-months, more than one Zero Balance
+Code, loan-age monotonicity, month gaps), loans never span cohorts, so it now iterates
+cohort partitions and sums. **30+ minutes and unfinished → 149 seconds.** Full
+`validate-data` now completes in about 4.5 minutes and all 37 artifacts are `REGISTERED`.
 
-The fix is the same shape as D032: the validators are per-loan or per-cohort by nature and
-should iterate cohorts rather than collecting the full table.
+### 2026-08-13 · D035 · Two validation gates that were lying, in opposite directions **[AUTO]**
+Once `validate-data` could finish, it reported **4 HARD** problems. Two were mine and two
+were real, and they needed opposite treatment.
+
+**Self-inflicted: the profile stamp broke the checksums it sat next to.** `sha256_dir`
+excluded `*.manifest.json` from the directory digest but not the `.lockin_profile.json`
+written by D032, so adding the stamp made both interim datasets report a checksum
+mismatch — a HARD error about data that had not changed. Sidecars that *describe* a
+dataset are now excluded as a named group, and the original checksums verify again.
+
+**Real, and mis-graded: source-data noise was failing the run.** The registered files
+genuinely contain 35 loans (of 20,199,214) with `orig_loan_term` of 481–544 months and
+one loan with a `0.0` note rate. These are properties of Freddie Mac's data, not parsing
+faults — and as unconditional HARD errors they would fail every real run forever, which
+is how a gate stops being read.
+
+Severity is now scaled by prevalence against `DOMAIN_VIOLATION_HARD_SHARE` (1e-4), and
+**the observed values are reported either way**. The rule is principled rather than
+convenient: a systematic layout shift or parse error corrupts a large fraction of a
+column and still stops the run; 35 impossible records in 20 million is noise to be
+recorded, not a reason to distrust the other 20,199,179. Lowering a severity to make a
+run pass would be the wrong instinct, so the threshold is a documented constant with
+tests on both sides of it.

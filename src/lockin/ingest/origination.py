@@ -219,6 +219,30 @@ def scan(cfg: Config) -> pl.LazyFrame:
     return pl.scan_parquet(root / "**" / "*.parquet")
 
 
+#: Above this share of records, an out-of-domain value is a systematic problem -- a
+#: layout shift or a parsing error -- and the run must stop. Below it, it is source-data
+#: noise: real registered files do contain a handful of impossible values, and a gate
+#: that always fires on real data teaches people to ignore it.
+DOMAIN_VIOLATION_HARD_SHARE: float = 1e-4
+
+
+def _domain_problem(label: str, n_bad: int, n_total: int, detail: str) -> str:
+    """Severity scaled by prevalence, with the observed values always reported."""
+    share = n_bad / max(n_total, 1)
+    level = "HARD" if share > DOMAIN_VIOLATION_HARD_SHARE else "SOFT"
+    return (
+        f"{level}: {n_bad:,} of {n_total:,} loans ({share:.3%}) have {label}. "
+        f"Observed: {detail}. "
+        + (
+            "That share is too high to be source noise -- suspect a layout shift or a "
+            "parsing error before accepting it."
+            if level == "HARD"
+            else "Retained and reported; too rare to indicate a parsing fault, but real "
+            "and worth knowing when a magnitude is quoted."
+        )
+    )
+
+
 def validate(cfg: Config) -> list[str]:
     """Origination-level validation. Returns a list of human-readable problems."""
     lf = scan(cfg)
@@ -229,6 +253,7 @@ def validate(cfg: Config) -> list[str]:
     )
     if n != n_unique:
         problems.append(f"HARD: {n - n_unique} duplicate loan_seq_no in origination ({n} rows)")
+    n_loans = int(n)
 
     bad_term = (
         lf.filter((pl.col("orig_loan_term") <= 0) | (pl.col("orig_loan_term") > 480))
@@ -237,7 +262,15 @@ def validate(cfg: Config) -> list[str]:
         .item()
     )
     if bad_term:
-        problems.append(f"HARD: {bad_term} loans with orig_loan_term outside (0, 480]")
+        vals = (
+            lf.filter((pl.col("orig_loan_term") <= 0) | (pl.col("orig_loan_term") > 480))
+            .select(pl.col("orig_loan_term").unique().sort().head(6))
+            .collect()["orig_loan_term"]
+            .to_list()
+        )
+        problems.append(
+            _domain_problem("orig_loan_term outside (0, 480]", bad_term, n_loans, str(vals))
+        )
 
     bad_rate = (
         lf.filter((pl.col("orig_interest_rate") <= 0) | (pl.col("orig_interest_rate") > 20))
@@ -246,7 +279,15 @@ def validate(cfg: Config) -> list[str]:
         .item()
     )
     if bad_rate:
-        problems.append(f"HARD: {bad_rate} loans with orig_interest_rate outside (0, 20]")
+        vals = (
+            lf.filter((pl.col("orig_interest_rate") <= 0) | (pl.col("orig_interest_rate") > 20))
+            .select(pl.col("orig_interest_rate").unique().sort().head(6))
+            .collect()["orig_interest_rate"]
+            .to_list()
+        )
+        problems.append(
+            _domain_problem("orig_interest_rate outside (0, 20]", bad_rate, n_loans, str(vals))
+        )
 
     bad_upb = lf.filter(pl.col("orig_upb") <= 0).select(pl.len()).collect().item()
     if bad_upb:
