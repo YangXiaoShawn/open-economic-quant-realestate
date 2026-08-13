@@ -429,8 +429,21 @@ def build_local_panel(cfg: Config) -> tuple[pl.DataFrame, Path, list[str]]:
         )
         if c in annual.columns
     ]
+    # log(0) is -inf, which propagates NaN silently through OLS and yields a fitted
+    # coefficient of null while the estimator still reports success. Zeros are real at
+    # metro level -- 34 of 826 metro-years authorised no 5+-unit buildings at all -- so
+    # they are mapped to NULL and dropped by the estimator's drop_nulls, which loses the
+    # observation honestly rather than turning it into a silent NaN. log1p is deliberately
+    # NOT used: it would silently change the outcome's units from a log to a
+    # log-of-count-plus-one, which is a different quantity from the one named.
     annual = annual.with_columns(
-        [pl.col(c).cast(pl.Float64).log().alias(f"log_{c}") for c in log_cols]
+        [
+            pl.when(pl.col(c).cast(pl.Float64) > 0)
+            .then(pl.col(c).cast(pl.Float64).log())
+            .otherwise(None)
+            .alias(f"log_{c}")
+            for c in log_cols
+        ]
     )
     if "n_purchase_denials" in annual.columns and "n_purchase_applications" in annual.columns:
         annual = annual.with_columns(

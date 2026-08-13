@@ -860,3 +860,52 @@ were dropped, so the number is visible rather than surprising.
 existing file without checking it covered the requested years, so a panel asking for
 2018–2023 silently got a 2021–2022 file cached by an earlier probe. Both LAUS fetchers now
 compare cached years against requested ones and refetch on a shortfall.
+
+### 2026-08-13 · D042 · First MSA-level run: 8× the clusters, and it did not rescue identification **[AUTO]**
+The MSA panel runs end to end on registered data: **138 metropolitan CBSAs** against 51
+states. Compared with the state run on the same loans and the same shock:
+
+| outcome | state (51 clusters) | MSA (138 clusters) | MSA pre-trend | tier |
+|---|---|---|---|---|
+| log purchase originations | −0.024 (t = −2.18) | **−0.042 (t = −4.93)** | **0.036 FAIL** | `descriptive` |
+| log refinance originations | −0.079 (t = −2.93) | −0.124 (t = −4.68) | **0.000 FAIL** | `descriptive` |
+| log single-family permits | −0.011 (t = −0.53) | −0.074 (t = −1.61) | 0.636 pass | `quasi_experimental` |
+| log 5+-unit permits *(placebo)* | −0.037 (t = −0.65) | +0.029 (t = +0.37) | 0.940 pass | placebo passes |
+| purchase denial rate *(placebo)* | −0.002 (t = −1.57) | −0.001 (t = −0.93) | 0.297 pass | placebo passes |
+
+**The cluster gain bought precision, not identification.** The purchase-originations
+t-statistic more than doubles and the magnitude nearly doubles — and the pre-trend test
+still fails, so the artifact is still `descriptive` and the number still must not be read
+causally. High- and low-exposure metros were already diverging before the shock, exactly
+as high- and low-exposure states were. That the same failure appears at two very
+different levels of aggregation is itself informative: it is not an artifact of pooling
+states.
+
+**Both placebos now pass**, where the denial rate failed at state level. More clusters
+made the placebos better behaved, which is the expected direction and mild evidence that
+the state-level placebo failure was a small-cluster artifact.
+
+The one outcome that passes its pre-trend, single-family permits, remains insignificant.
+**Nothing at market level supports a causal lock-in claim at either geography.**
+
+Known gaps in this run, recorded rather than papered over: **FHFA publishes a
+purchase-only quarterly index for only 65 of the 138 metros**, so the house-price row
+rests on half the panel; **BLS refused further requests** ("daily threshold ... has been
+reached") so metro LAUS covers only 2021–2022 and the cached-coverage guard correctly
+reports the control as UNAVAILABLE rather than serving a short panel; and the monthly MSA
+specifications are skipped for want of a monthly outcome at that geography.
+
+### 2026-08-13 · D043 · An "ok" result carrying null coefficients **[AUTO]**
+`log_permits_5plus` came back from the MSA run with `status: "ok"` and `coef: null`.
+Thirty-four of 826 metro-years authorised no 5+-unit buildings at all, `log(0)` is `-inf`,
+and the NaN propagated through OLS to a null coefficient that the estimator still called
+a success.
+
+Fixed at both ends. The log transform now maps non-positive counts to **null** rather
+than `-inf`, so the observation is dropped honestly by the existing `drop_nulls`;
+`log1p` was deliberately **not** used, because it would quietly redefine the outcome from
+a log to a log-of-count-plus-one while keeping the name. And `did_two_period` now refuses
+to return `status: "ok"` when the design or outcome contains non-finite values, or when
+the fitted coefficient is not finite — a degenerate fit is reported as a failure with a
+reason instead of as a result full of nulls. With both in place the cell estimates
+normally: +0.029, t = +0.37, pre-trend 0.94.

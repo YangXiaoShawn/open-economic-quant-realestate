@@ -452,9 +452,32 @@ def did_two_period(
         names.append(f"trend[{c}]_x_post")
 
     X = np.column_stack(cols)
+    if not np.all(np.isfinite(y)) or not np.all(np.isfinite(X)):
+        return {
+            "status": "skipped",
+            "reason": (
+                "non-finite values in the design or outcome (usually log of a zero "
+                "count). A fit on these returns null coefficients while still reporting "
+                "success, so it is refused instead."
+            ),
+            "outcome": outcome,
+            "exposure": exposure,
+        }
     fit = _cluster_ols(y, X, names, g)
     j = names.index("exposure_x_post")
     b, se = float(fit["params"][j]), float(fit["bse"][j])
+    if not (np.isfinite(b) and np.isfinite(se)):
+        return {
+            "status": "skipped",
+            "reason": (
+                f"the fitted exposure coefficient is not finite (coef={b}, se={se}), "
+                "which means a singular or degenerate design. Reported as a failure "
+                "rather than as an 'ok' result carrying nulls."
+            ),
+            "outcome": outcome,
+            "exposure": exposure,
+            "n_obs": fit["n_obs"],
+        }
     return {
         "status": "ok",
         "specification": "y_gt = a_g + g_t + beta (E_g x post_t) + X'theta + e_gt",
