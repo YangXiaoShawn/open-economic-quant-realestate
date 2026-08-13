@@ -678,3 +678,41 @@ column and still stops the run; 35 impossible records in 20 million is noise to 
 recorded, not a reason to distrust the other 20,199,179. Lowering a severity to make a
 run pass would be the wrong instinct, so the threshold is a documented constant with
 tests on both sides of it.
+
+### 2026-08-13 · D036 · MSA-level HMDA has two silent-zero traps **[AUTO, BLOCKING #3]**
+Probing the CFPB aggregations API before writing the adapter — the discipline D017 was
+opened for — found that `msamds` is accepted and echoed back, and still returns **zero**
+in two distinct situations. Neither raises. A naive MSA-level fetch would have produced a
+well-formed panel in which the largest metros in the country had no lending at all.
+
+**Trap 1: HMDA reports Metropolitan Divisions, not their parent MSA.**
+
+| code | area | 2022 purchase originations |
+|---|---|---|
+| 16984 | Chicago-Naperville-Evanston **MD** | 89,212 |
+| 12060 | Atlanta (no divisions) | 94,726 |
+| 16980 | Chicago **MSA** (the parent) | **0** |
+| 35620 | New York MSA | **0** |
+| 31080 | Los Angeles MSA | **0** |
+
+Every divided metro — New York, Los Angeles, Chicago, Dallas, Miami, Washington, Boston,
+Detroit, Philadelphia, San Francisco, Seattle, Minneapolis — returns zero under its CBSA
+code. This is exactly why `lockin.adapters.omb_cbsa` loads divisions as first-class
+entries with a `code_kind` discriminator (D028); a crosswalk that folded them into their
+parents would have made this trap undetectable.
+
+**Trap 2: HMDA year Y uses the OMB delineation in force in year Y.**
+Two division codes returned zero despite being valid divisions: `11694`
+(Arlington-Alexandria-Reston) and `12054` (Atlanta-Sandy Springs-Roswell). Both exist
+**only in the 2023 vintage** of the crosswalk — they are new divisions, and 2022 HMDA
+data predates them. `11244` (Anaheim) and `14454` (Boston), present since 2015, return
+real counts.
+
+**Consequence for #3.** MSA-level HMDA is not "pass `msamds` instead of `states`". It
+requires resolving each geography **per year** against the delineation in force for that
+year, and it requires an explicit **non-zero assertion**: a metropolitan area with zero
+purchase originations in a year is not a real observation, it is a failed lookup. Both
+belong in the adapter, alongside the existing `_assert_filters_applied` echo check.
+
+Recorded now rather than discovered later, because the failure mode is a plausible number
+rather than an error.
