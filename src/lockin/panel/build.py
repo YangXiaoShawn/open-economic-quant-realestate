@@ -86,10 +86,55 @@ STATE_FIPS_TO_ABBR: dict[int, str] = {
 }
 
 
+#: FHFA's own name for the geographic level, keyed by our panel geography.
+_HPI_LEVEL: dict[str, str] = {"state": "State", "msa": "MSA"}
+
+
+class GeographyMismatchError(RuntimeError):
+    """A source is keyed to a different geography than the panel.
+
+    Deliberately **not** a ``ValueError``: the per-source ``except (FileNotFoundError,
+    ValueError)`` handlers downgrade a failure to "source unavailable" and carry on,
+    which is right for a missing file and wrong for this. A geography mismatch means the
+    run is mis-specified, not under-supplied, and it must stop.
+
+    Raised rather than joined. A left join between MSA-keyed exposure and state-keyed
+    outcomes does not fail -- it silently produces all-null outcomes, or worse, matches
+    nothing and leaves a panel that looks well-formed at the wrong level entirely. That
+    is precisely how a run can report a plausible number for a geography it never
+    measured.
+    """
+
+
+def _assert_geography_compatible(
+    name: str, df: pl.DataFrame, expected: set[str], cfg: Config, notes: list[str]
+) -> None:
+    """Check a source's geography keys against the panel's before any join."""
+    got = set(df["geography"].unique().to_list())
+    overlap = expected & got
+    if overlap:
+        missing = len(expected - got)
+        if missing:
+            notes.append(
+                f"{name}: {len(overlap):,} of {len(expected):,} panel geographies matched; "
+                f"{missing:,} have no {name} coverage and are null, not imputed."
+            )
+        return
+    raise GeographyMismatchError(
+        f"{name} is keyed to a geography that shares NO values with the loan stock. "
+        f"Panel geography is {cfg.panel.geography!r}; {name} keys look like "
+        f"{sorted(got)[:3]} while the stock has {sorted(expected)[:3]}. This source is "
+        f"published at a different level and CANNOT be joined -- extend the adapter to "
+        f"the {cfg.panel.geography} level or drop {cfg.panel.geography} analysis for "
+        "this outcome. Joining anyway would silently produce a panel at the wrong level."
+    )
+
+
 def build_local_panel(cfg: Config) -> tuple[pl.DataFrame, Path, list[str]]:
     """Build and persist the monthly and annual local-market panels."""
     notes: list[str] = []
     stock = load_active_stock(cfg)
+    panel_geos = set(stock["geography"].unique().to_list())
 
     # --- HPI -----------------------------------------------------------------
     # Growth is computed at the index's OWN published frequency (quarterly at state
@@ -101,7 +146,7 @@ def build_local_panel(cfg: Config) -> tuple[pl.DataFrame, Path, list[str]]:
             cfg,
             flavor=cfg.panel.hpi_flavor,
             frequency=cfg.panel.hpi_frequency,
-            level="State",
+            level=_HPI_LEVEL[cfg.panel.geography],
             seasonal=cfg.panel.hpi_seasonal,
         )
         per_year = 4 if cfg.panel.hpi_frequency == "quarterly" else 12
@@ -116,9 +161,10 @@ def build_local_panel(cfg: Config) -> tuple[pl.DataFrame, Path, list[str]]:
             "hpi_frequency",
         )
         hpi = fhfa_hpi.to_monthly(hpi_growth)
+        _assert_geography_compatible("FHFA HPI", hpi, panel_geos, cfg, notes)
         notes.append(
             f"FHFA HPI: {cfg.panel.hpi_flavor}, published {cfg.panel.hpi_frequency}, "
-            f"State, basis={hpi_q['index_basis'][0]}, {hpi_q.height:,} published rows "
+            f"{_HPI_LEVEL[cfg.panel.geography]}, basis={hpi_q['index_basis'][0]}, {hpi_q.height:,} published rows "
             f"-> {hpi.height:,} monthly rows (level held constant within period). "
             "Growth is computed at the PUBLISHED frequency."
         )
@@ -148,6 +194,7 @@ def build_local_panel(cfg: Config) -> tuple[pl.DataFrame, Path, list[str]]:
             )
             .drop_nulls("geography")
         )
+        _assert_geography_compatible("Census BPS", bps, panel_geos, cfg, notes)
         notes.append(
             f"Census BPS: {bps.height:,} state-months, vintages "
             f"{sorted(set(bps['vintage'].to_list()))}"
@@ -160,6 +207,13 @@ def build_local_panel(cfg: Config) -> tuple[pl.DataFrame, Path, list[str]]:
     # Addresses the local-labour-shock threat in IDENTIFICATION_STRATEGY 3.4. The
     # panel is built with or without it; absence is recorded, never silently ignored.
     laus = bls_laus.try_load(cfg)
+    if laus is not None and not (set(laus["geography"].unique().to_list()) & panel_geos):
+        notes.append(
+            "BLS LAUS is published for STATES and shares no key with a "
+            f"{cfg.panel.geography}-level panel. Dropped rather than joined; the "
+            "local-labour-shock threat is UNCONTROLLED at this geography."
+        )
+        laus = None
     if laus is not None:
         laus = laus.select("geography", "period", "unemployment_rate")
         notes.append(
@@ -179,6 +233,12 @@ def build_local_panel(cfg: Config) -> tuple[pl.DataFrame, Path, list[str]]:
     # single cross-section, so it is joined WITHOUT a period key and must be used as a
     # trend control, never a level control -- see lockin.adapters.teleworkable.
     tele = teleworkable.try_load(cfg, cfg.panel.geography)
+    if tele is not None and not (set(tele["geography"].unique().to_list()) & panel_geos):
+        notes.append(
+            "Teleworkable share shares no key with the panel geography. Dropped rather "
+            "than joined; the remote-work threat is UNCONTROLLED at this geography."
+        )
+        tele = None
     if tele is not None:
         tele = tele.select("geography", "teleworkable_share")
         notes.append(
@@ -210,6 +270,7 @@ def build_local_panel(cfg: Config) -> tuple[pl.DataFrame, Path, list[str]]:
     # --- HMDA (annual) -------------------------------------------------------
     try:
         h = hmda.load(cfg)
+        _assert_geography_compatible("HMDA", h, panel_geos, cfg, notes)
         notes.append(
             f"HMDA: {h.height:,} state-years, coverage regimes "
             f"{sorted(set(h['coverage_regime'].to_list()))}. Counts are NOT "

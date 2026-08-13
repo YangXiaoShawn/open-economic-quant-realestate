@@ -66,6 +66,50 @@ ADMIN_REMOVAL_MONTHLY_PROB: float = 0.0012
 #: Monthly modification probability among delinquent loans.
 MODIFICATION_MONTHLY_PROB: float = 0.004
 
+#: Share of synthetic loans left outside any CBSA. Roughly a sixth of US mortgage
+#: originations are in non-metropolitan areas, and a null MSA field must stay on the
+#: exercised code path -- the MSA-level panel has to drop those loans, not impute them.
+NON_METRO_SHARE: float = 0.16
+
+
+def _fixture_msa_codes(cfg) -> dict[str, list[str]]:
+    """Real, composition-stable metropolitan CBSA codes for each fixture state.
+
+    Returns ``{}`` when the OMB crosswalk is not cached. Fixtures must not invent
+    five-digit codes: a fabricated code would either fail to resolve (making the
+    crosswalk look broken) or collide with a real metro (making a synthetic result
+    look attributable to a real place).
+    """
+    from lockin.adapters import omb_cbsa
+
+    try:
+        cw = omb_cbsa.load_crosswalk(cfg)
+        stab = omb_cbsa.load_stability(cfg)
+    except (FileNotFoundError, OSError):
+        return {}
+
+    import polars as pl
+
+    usable = set(
+        stab.filter(
+            (pl.col("code_kind") == "cbsa") & pl.col("verdict").is_in(["stable", "renamed_only"])
+        )["area_code"].to_list()
+    )
+    fips_to_state = {s[1]: s[0] for s in STATE_MIX}
+    out: dict[str, list[str]] = {}
+    sub = cw.filter(
+        (pl.col("vintage") == omb_cbsa.DEFAULT_ANALYSIS_VINTAGE)
+        & (pl.col("code_kind") == "cbsa")
+        & (pl.col("cbsa_type") == "metro")
+        & pl.col("area_code").is_in(list(usable))
+    )
+    for row in sub.group_by(["state_fips", "area_code"]).agg(pl.len()).iter_rows(named=True):
+        st = fips_to_state.get(str(row["state_fips"]))
+        if st:
+            out.setdefault(st, []).append(str(row["area_code"]))
+    return {k: sorted(v) for k, v in out.items()}
+
+
 #: State shares, and each state's tilt toward the low-rate 2020-21 cohorts.
 #: The tilt is what generates cross-sectional exposure variation.
 STATE_MIX: tuple[tuple[str, str, float, float], ...] = (
@@ -178,6 +222,14 @@ def generate(
     state_share = state_share / state_share.sum()
     state_tilt = {s[0]: s[3] for s in STATE_MIX}
 
+    # MSA codes are drawn from the REAL OMB crosswalk so that the MSA-level code path
+    # (crosswalk join, stability filter, metdiv discrimination) is genuinely exercised.
+    # The codes are real; which synthetic loan gets which code is arbitrary, so no
+    # MSA-level number from fixtures means anything about that metro. When the crosswalk
+    # is not cached the field stays null and the MSA path is simply untested, which the
+    # manifest records rather than silently substituting made-up codes.
+    msa_by_state = _fixture_msa_codes(cfg)
+
     all_files: list[str] = []
     total_loans = 0
     total_perf = 0
@@ -196,6 +248,21 @@ def generate(
         probs = state_share * np.clip(tilt_vec, 0.05, None)
         probs = probs / probs.sum()
         st = rng.choice(states, size=n, p=probs)
+
+        # Draw an MSA within the assigned state. Larger metros are more likely, which
+        # is approximated by weighting toward the lower (older, larger-metro) codes
+        # only weakly -- the shape does not matter for a code-path test, but a single
+        # metro per state would leave the multi-MSA-per-state join untested.
+        msa = np.array([""] * n, dtype=object)
+        if msa_by_state:
+            for s in np.unique(st):
+                pool = msa_by_state.get(str(s), [])
+                if not pool:
+                    continue
+                idx = np.flatnonzero(st == s)
+                picks = rng.choice(pool, size=idx.size)
+                in_metro = rng.random(idx.size) >= NON_METRO_SHARE
+                msa[idx[in_metro]] = picks[in_metro]
 
         # Note rates: centred on the cohort's real market rate, with dispersion.
         note = (
@@ -239,7 +306,7 @@ def generate(
                     _yyyymm(first_pay),
                     str(fthb[i]),
                     _yyyymm(mat_i),
-                    "",  # MSA left null in fixtures; state is the fixture geography
+                    str(msa[i]),  # real stable metro CBSA code, or "" for non-metro
                     str(int(mi[i])) if mi[i] > 0 else "0",
                     str(int(units[i])),
                     str(occ[i]),
@@ -416,7 +483,11 @@ def generate(
             "Note-rate levels and the monthly hazard are driven by the REAL PMMS "
             "path, so the coupon distribution across cohorts is realistically "
             "shaped -- this makes the engineering test realistic, not empirical.",
-            "MSA code is left null; the fixture geography is state.",
+            "MSA codes are REAL, composition-stable metropolitan CBSA codes taken from "
+            "the OMB crosswalk, so the MSA code path is exercised. Which synthetic loan "
+            "receives which code is ARBITRARY -- no MSA-level number computed from these "
+            "fixtures says anything about that metro. When the crosswalk is not cached "
+            "the field is null and the MSA path is untested.",
             "No ARM loans; no HARP/Relief Refinance loans; no super-conforming loans.",
         ],
         data_class="SYNTHETIC",

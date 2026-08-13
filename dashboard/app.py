@@ -151,7 +151,7 @@ with tabs[0]:
         st.warning(f"PMMS unavailable: {exc}")
 
     st.header("Distribution of outstanding note rates")
-    stock_p = cfg.path("processed", "active_stock.parquet")
+    stock_p = cfg.path("processed", f"active_stock_{cfg.panel.geography}.parquet")
     if stock_p.exists():
         stock = pl.read_parquet(stock_p)
         deciles = [c for c in stock.columns if c.startswith("note_rate_p")]
@@ -483,7 +483,7 @@ with tabs[3]:
             )
 
         st.subheader("Cohort composition of the active stock")
-        mix_p = cfg.path("processed", "active_stock_cohort_mix.parquet")
+        mix_p = cfg.path("processed", f"active_stock_cohort_mix_{cfg.panel.geography}.parquet")
         if mix_p.exists():
             mix = pl.read_parquet(mix_p)
             agg = (

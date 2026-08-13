@@ -1,12 +1,17 @@
 # STATUS
 
-**Last updated:** 2026-08-11 (second pass) · config `sample`
+**Last updated:** 2026-08-13 (third pass) · config `sample`
 
-> ⚠️ **The loan-level results in this run are SYNTHETIC.** The Freddie Mac
-> Single-Family Loan-Level Dataset requires registration, which this repository does
-> not bypass. Loan-level numbers below come from labeled synthetic fixtures and are
-> **software verification, not empirical findings**. The public aggregate series
-> (PMMS, FHFA HPI, HMDA, Census BPS) **are real**.
+> ⚠️ **Every estimate in this run is SYNTHETIC, including the market-level ones.** The
+> Freddie Mac Single-Family Loan-Level Dataset requires registration, which this
+> repository does not bypass. The loan stock is the only source of a local coupon
+> distribution, so **lock-in exposure — the treatment variable in every specification —
+> is synthetic**, even where the outcome series are real. Nothing here is an empirical
+> finding about U.S. housing. What is verified is the machinery: parsers, joins, event
+> rules, estimators, pre-trend logic, and the automatic tier demotion.
+>
+> The public aggregate series themselves (PMMS, FHFA HPI, HMDA, Census BPS, BLS LAUS,
+> OMB delineations, Dingel–Neiman) **are real** and are fetched live.
 
 ---
 
@@ -22,10 +27,10 @@ panel → exposure event study → automatically generated research memo.
 |---|---|
 | Pipeline stages | **19 / 19 OK** (`uv run lockin status`) |
 | Result artifacts | **37**, all with evidence tier + population + provenance |
-| Tests | **110 passed** (109 offline + 1 network), 0 failed |
+| Tests | **144 passed** (143 offline + 1 network), 0 failed |
 | `ruff check` | clean |
 | `ruff format --check` | clean |
-| `mypy` | clean (42 source files; core interfaces strict) |
+| `mypy` | clean (45 source files; core interfaces strict) |
 | `make validate-data` | **0 hard**, 0 soft, 11 informational |
 | Generated reports | 10 |
 
@@ -73,38 +78,59 @@ is a successful software test of the estimator, not a fact about U.S. mortgages.
 - Out-of-time AUC: gradient boosting 0.599 vs discrete-time logit 0.613. The
   interpretable specification is not leaving predictive signal on the table.
 
-## 4. What the market-level slice shows (REAL public data)
+## 4. The market-level slice — SYNTHETIC TREATMENT, real outcomes
+
+> **Read this before any number below.** The *outcomes* (HMDA, FHFA HPI, Census BPS, BLS
+> LAUS) are real. The **treatment is not**: lock-in exposure is computed from the
+> synthetic loan fixtures, because the Freddie Mac stock is the only source of a local
+> coupon distribution and it is behind registration. A difference-in-differences with a
+> synthetic treatment variable is **not an empirical finding of any kind** — it is a test
+> that the estimator, the joins, the pre-trend logic, and the tier demotion all work.
+> Earlier versions of this file headed this section "REAL public data", which was
+> misleading, and the artifacts themselves were always stamped `SYNTHETIC`.
+
+**What this run does demonstrate, and it is worth stating.** Regenerating the fixtures
+changed only the random assignment of loans to geographies. The purchase-originations
+estimate moved from +0.024 to −0.003, and the **denial-rate placebo went from t = −1.00
+to t = −2.78** — a "significant" placebo effect from a treatment that is, by
+construction, arbitrary noise. With 26 clusters and annual data, this design produces
+|t| > 2.5 on a placebo from reshuffling alone. That is the most useful thing the
+synthetic market-level slice has produced: a direct measurement of how little the
+cluster count supports.
 
 Exposure is the frozen 2021-12 coupon distribution evaluated at the later national rate
-path, across 26 states: mean 0.845, s.d. 0.031. It is **not** randomly assigned —
-correlation −0.38 with 2019–21 price growth and −0.73 with the pre-shock coupon level.
+path, across 25 states: mean 0.860, s.d. 0.027, range 0.787–0.917.
 
 | outcome | DiD (per 1 s.d.) | s.e. | t | pre-trend p | tier |
 |---|---|---|---|---|---|
-| log purchase originations | **+0.0010** | 0.0191 | +0.05 | 0.342 | `quasi_experimental` |
-| log refinance originations | −0.0579 | 0.0657 | −0.88 | 0.364 | `quasi_experimental` (contaminated) |
-| house price growth | +0.0050 | 0.0041 | +1.23 | **0.003 FAIL** | `descriptive` (demoted) |
-| log single-family permits | −0.0276 | 0.0169 | −1.63 | **0.007 FAIL** | `descriptive` (demoted) |
-| log 5+-unit permits *(placebo)* | −0.0618 | 0.0452 | −1.37 | 0.353 | placebo passes |
-| purchase denial rate *(placebo)* | −0.0014 | 0.0007 | −1.90 | 0.629 | **placebo FAILS** |
+| log purchase originations | **−0.0031** | 0.0185 | −0.17 | 0.547 | `quasi_experimental` |
+| log refinance originations | +0.0228 | 0.0531 | +0.43 | 0.185 | `quasi_experimental` (contaminated) |
+| house price growth | +0.0025 | 0.0041 | +0.62 | 0.150 | `descriptive` (circularity guard) |
+| log single-family permits | −0.0108 | 0.0203 | −0.53 | 0.842 | `quasi_experimental` |
+| log 5+-unit permits *(placebo)* | −0.0372 | 0.0572 | −0.65 | **0.057 FAIL** | `descriptive` |
+| purchase denial rate *(placebo)* | −0.0023 | 0.0008 | **−2.78** | 0.840 | **placebo FAILS** |
 
-**The headline is a null.** The purchase-originations estimate is indistinguishable
-from zero. With 26 clusters, annual HMDA data, and time fixed effects absorbing the
-common national shock, this design has limited power to detect a cross-state
-differential — so this is a null result, not a refutation of lock-in, and not
-suggestive evidence for it either.
+**The headline is a null, and the placebo fails.** Neither is evidence about U.S.
+housing, because the treatment is synthetic. Both are evidence about the *design*: a
+26-cluster annual panel cannot distinguish a real effect from a reshuffle.
 
-**A placebo outcome fails.** The denial rate moves at t = −1.90. That counts *against*
-the design and is flagged `placebo_FAIL` in the robustness grid.
+**Controls now actually bind.** Two predetermined characteristics —
+`pre_hpi_growth_2019_2021` and the new `teleworkable_share` — are time-invariant, so as
+level controls they were exactly collinear with the geography fixed effects and
+constrained nothing. Both now enter interacted with every period. `DECISION_LOG` D027
+decomposes the effect on the headline across five specifications; the null survived all
+five in the pre-regeneration fixtures.
+
+**House-price growth is demoted for a stated reason,** not a failed test. Its pre-trend
+control is built from the same FHFA series as its outcome, so the test cannot fail;
+`_circular_trend_controls` blocks promotion rather than accepting a p-value of 0.85 as
+reassurance.
 
 Robustness grid: **42 cells**. The eight added in the second pass — alternative
 pre-shock dates (2021-06, 2022-03), alternative rate series (`pmms15`), alternative HPI
 concepts (all-transactions, expanded-data), and three loan sub-samples — are all
 insignificant. **The null is robust** to the pre-shock date, the rate series, the price
 index concept, and the loan population.
-
-Adding the unemployment control moved the headline from +0.0010 to +0.0007. The null is
-not an artifact of omitting labour-market conditions.
 
 **Loan-level sensitivity (new).** Three modelling choices each move the hazard
 coefficient by more than one standard error, so they must be stated whenever a magnitude
@@ -172,9 +198,10 @@ Identification-threat status is now recorded **on every event-study artifact** u
 |---|---|
 | pandemic demand reallocation | CONTROLLED (2019–21 price growth) |
 | local labour shocks | **CONTROLLED** (BLS LAUS unemployment rate) |
+| pandemic demand reallocation | **CONTROLLED** — but only since D027; it was a *level* control before, i.e. collinear with geography FE and binding nothing |
 | differential refinancing booms | PARTIAL (outcome labeled contaminated; control available) |
 | national monetary-policy endogeneity | ABSORBED by period fixed effects |
-| remote-work exposure | **UNCONTROLLED** — no teleworkable-share adapter |
+| remote-work exposure | **CONTROLLED** — Dingel–Neiman teleworkable share, as a *trend* control (feasibility, not realisation) |
 | geography-specific rate dispersion | **UNCONTROLLED** — PMMS is national |
 | spillovers | UNCORRECTED — biases toward zero |
 
@@ -198,20 +225,40 @@ full extraction, and the `SYNTHETIC` stamps and report banners disappear on thei
 ## 8. Next milestones, in priority order
 
 1. **Registered-data run** (blocked above). Everything downstream is already wired.
-2. **MSA-level analysis.** Needs a versioned OMB delineation crosswalk — Freddie's MSA
-   field is explicitly *not* updated for redefinitions. This is the single highest-value
-   fix for statistical power (26 clusters → several hundred).
+   This is the only step that turns any number in this repository into evidence.
+
+2. **Finish MSA-level analysis.** The hard part is done: `lockin.adapters.omb_cbsa`
+   builds a six-vintage crosswalk and a per-code stability verdict, the fixtures now
+   carry real composition-stable CBSA codes, `configs/msa.yaml` exists, the active-stock
+   path is geography-keyed, and FHFA HPI resolves at MSA level. **215 metropolitan CBSAs
+   are stable and usable — an 8× gain over 26 state clusters.**
+
+   What remains is three outcome adapters that are still state-only. The panel builder
+   now **refuses** to join them at MSA level rather than silently producing a
+   wrong-geography panel (`GeographyMismatchError`), which is how the first attempt at
+   this failed: it built a plausible-looking 182-row panel with MSA exposure joined onto
+   state outcomes and teleworkable matching 0 of 182 rows, without raising anything.
+
+   | source | MSA support needed |
+   |---|---|
+   | HMDA | CFPB Data Browser accepts `msamds`; adapter passes `states` only |
+   | Census BPS | MSA files exist under a different path and layout |
+   | BLS LAUS | metro series exist (`LAUMT…`); adapter builds state IDs only |
+
+   Two design questions to settle when doing it: **47 of the 430 metro CBSAs span more than one
+   state**, so any state-published control needs an allocation rule; and Freddie's MSA
+   field is null for ~15% of loans (non-metro), which must be dropped, never imputed —
+   there is no ZIP→CBSA path in the loan file.
+
 3. **Local market-rate series** from HMDA-reported interest rates (2018+), to reduce the
    measurement error the national PMMS introduces into the loan-level gap.
-4. **Teleworkable-share control**, the remaining unresolved threat (unemployment is
-   now controlled via BLS LAUS). Also a **stable-servicer** robustness sample, which is
-   currently not constructible because servicer names below 1% of quarterly UPB are
-   collapsed to "Other".
-5. **Stock-flow housing model** with search frictions — deliberately deferred until the
-   vertical slice was stable, which it now is.
-6. **County level**, after (2).
 
----
+4. **Stable-servicer robustness sample** — still not constructible as intended, because
+   servicer names below 1% of quarterly UPB are collapsed to "Other".
+
+5. **Stock-flow housing model** with search frictions.
+
+6. **County level**, after (2).
 
 ## 9. Reproducing this
 

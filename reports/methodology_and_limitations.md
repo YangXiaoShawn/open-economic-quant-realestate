@@ -6,8 +6,8 @@
 
 | | |
 |---|---|
-| Generated | `2026-08-11T17:45:24+00:00` |
-| Git commit | `d85ce3220ad4-dirty` |
+| Generated | `2026-08-13T09:34:48+00:00` |
+| Git commit | `2dbe7119f97f-dirty` |
 | Config | `sample` (digest `9fb71e2454f98608`) |
 | Data class | **SYNTHETIC** |
 | Data period | `2021-01..2024-12` |
@@ -87,7 +87,7 @@ Consequence for interpretation: a statement like "X% of loans are locked in abov
 - **Modifications** reset loan age per the official guide; the validator tolerates the reset and flags affected loans.
 - **Reappearing loans** (performance months after an exit) are truncated at the exit and flagged.
 
-In this run: 8,551 of 10,500 loans left truncated; 8,015 censored.
+In this run: 8,575 of 10,500 loans left truncated; 8,018 censored.
 
 ## 5. Frequency and index-concept discipline
 
@@ -99,7 +99,7 @@ In this run: 8,551 of 10,500 loans left truncated; 8,015 censored.
 
 ## 6. Treatment definition
 
-Exposure `pre_locked_share_upb_200`, frozen at `2021-12`, mean 0.8450, s.d. 0.0312 across 26 geographies. Standardised in every regression so coefficients read per standard deviation.
+Exposure `pre_locked_share_upb_200`, frozen at `2021-12`, mean 0.8599, s.d. 0.0265 across 25 geographies. Standardised in every regression so coefficients read per standard deviation.
 
 ## 7. Validation
 
@@ -117,7 +117,7 @@ Exposure `pre_locked_share_upb_200`, frozen at `2021-12`, mean 0.8450, s.d. 0.03
 
 **manifests**
 
-- INFO: verified 13 dataset manifest(s)
+- INFO: verified 19 dataset manifest(s)
 
 **market_rates**
 
@@ -127,21 +127,21 @@ Exposure `pre_locked_share_upb_200`, frozen at `2021-12`, mean 0.8450, s.d. 0.03
 
 **governance**
 
-- INFO: governance scan over 77 tracked files
+- INFO: governance scan over 87 tracked files
 
 **loan_events**
 
-- INFO: 8551 of 10500 loans are LEFT TRUNCATED (81.4%): first observed at loan age > 1. Two distinct causes are combined here -- (a) the Freddie Mac ACQUISITION lag, since performance records begin at acquisition rather than origination, and (b) the configured PERFORMANCE WINDOW, which truncates any cohort originated before it. Both are handled identically by the risk sets, but only (a) is a property of the data.
-- INFO: of those, 6168 enter in the FIRST month of the performance window, i.e. their truncation is a window artifact rather than an acquisition lag
+- INFO: 8575 of 10500 loans are LEFT TRUNCATED (81.7%): first observed at loan age > 1. Two distinct causes are combined here -- (a) the Freddie Mac ACQUISITION lag, since performance records begin at acquisition rather than origination, and (b) the configured PERFORMANCE WINDOW, which truncates any cohort originated before it. Both are handled identically by the risk sets, but only (a) is a property of the data.
+- INFO: of those, 6186 enter in the FIRST month of the performance window, i.e. their truncation is a window artifact rather than an acquisition lag
 
 **episodes**
 
-- INFO: start-of-month balance sources: prior_month_reported_upb=357,841, same_month_reported_upb=10,297, scheduled_amortisation=203
+- INFO: start-of-month balance sources: prior_month_reported_upb=357,589, same_month_reported_upb=10,306, scheduled_amortisation=194
 
 **coverage**
 
-- INFO: active stock 6050 loans at 2021-01-01, peaking at 8549 at 2022-04-01, ending at 7453 at 2024-12-01 across 26 geographies
-- INFO: attrition from peak 12.82%; net change first-to-last 23.19% (the stock has BOTH entry and exit -- see the coverage interpretation in the manifest)
+- INFO: active stock 6024 loans at 2021-01-01, peaking at 8506 at 2022-04-01, ending at 7417 at 2024-12-01 across 25 geographies
+- INFO: attrition from peak 12.8%; net change first-to-last 23.12% (the stock has BOTH entry and exit -- see the coverage interpretation in the manifest)
 
 ## 8. Limitations, ranked by how much they should change your reading
 
@@ -169,17 +169,21 @@ Exposure `pre_locked_share_upb_200`, frozen at `2021-12`, mean 0.8450, s.d. 0.03
 
 | dataset | schema@retrieved#checksum |
 |---|---|
-| `active_mortgage_stock` | `active-stock-v1@2026-08-11T17:43:39+00:00#336fc723d417` |
+| `active_mortgage_stock` | `active-stock-v1@2026-08-13T09:32:43+00:00#f36e659e2b57` |
 | `bls_laus` | `bls-api-v2-laus-state-v1@2026-08-11T17:41:19+00:00#8cd9335cc5ae` |
-| `census_bps` | `census-bps-state-monthly-v1@2026-08-11T00:56:23+00:00#a88b1ad2c127` |
-| `fhfa_hpi` | `fhfa-hpi-master-v1@2026-08-11T00:54:48+00:00#8ab042e042ff` |
-| `freddie_llds_synthetic_fixtures` | `freddie-llds-2026-08-10@2026-08-11T05:49:57+00:00#6b358e5f7d60` |
-| `hmda` | `cfpb-data-browser-aggregations-v2@2026-08-11T01:07:30+00:00#6946b46cf136` |
-| `loan_episodes` | `loan-episodes-v1@2026-08-11T05:49:58+00:00#7487945b2064` |
-| `loan_events` | `loan-events-v1@2026-08-11T05:49:57+00:00#4a00c7112e61` |
-| `local_market_panel_annual` | `local-panel-v1@2026-08-11T17:43:39+00:00#f0a464fb2370` |
-| `local_market_panel_monthly` | `local-panel-v1@2026-08-11T17:43:39+00:00#4d56f18bd056` |
-| `pmms` | `pmms-history-v1@2026-08-11T00:54:48+00:00#c74cccece4a6` |
+| `census_bps` | `census-bps-state-monthly-v1@2026-08-13T09:27:18+00:00#d3e4a46f74a5` |
+| `fhfa_hpi` | `fhfa-hpi-master-v1@2026-08-13T09:25:46+00:00#8ab042e042ff` |
+| `freddie_llds_synthetic_fixtures` | `freddie-llds-2026-08-10@2026-08-13T09:29:56+00:00#68da95265c31` |
+| `hmda` | `cfpb-data-browser-aggregations-v2@2026-08-13T09:27:18+00:00#6946b46cf136` |
+| `loan_episodes` | `loan-episodes-v1@2026-08-13T09:32:34+00:00#5e658b4c1b59` |
+| `loan_events` | `loan-events-v1@2026-08-13T09:30:24+00:00#aada815c333d` |
+| `local_market_panel_annual` | `local-panel-v1@2026-08-13T09:32:43+00:00#d56df8b8380b` |
+| `local_market_panel_monthly` | `local-panel-v1@2026-08-13T09:32:43+00:00#c6946b128163` |
+| `omb_cbsa_crosswalk` | `census-list1-v1@2026-08-13T09:27:19+00:00#222ea05e6b27` |
+| `omb_cbsa_stability` | `census-list1-v1@2026-08-13T09:27:19+00:00#30514ffa77ff` |
+| `pmms` | `pmms-history-v1@2026-08-13T09:25:46+00:00#c74cccece4a6` |
+| `teleworkable_msa` | `dingel-neiman-2020-v1@2026-08-13T09:27:18+00:00#e19e017515e6` |
+| `teleworkable_state` | `dingel-neiman-2020-v1@2026-08-13T09:27:18+00:00#f663415361e4` |
 
 ---
 

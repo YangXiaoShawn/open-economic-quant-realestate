@@ -479,3 +479,33 @@ clone would therefore have run with the local-labour-shock threat `UNCONTROLLED`
 the documentation said otherwise, and nothing would have complained. `fetch-public-data`
 now fetches all three optional sources, reports them in a separate `optional` tier, and
 prints an explicit warning naming the threat left uncontrolled when one fails.
+
+### 2026-08-13 · D030 · MSA-level geography: guarded, not yet runnable **[AUTO]**
+With the crosswalk (D028) in place, the fixtures now carry **real** composition-stable
+metropolitan CBSA codes drawn from the 2023 delineation, with ~15% left null to keep the
+non-metro path exercised. Fixtures must not invent five-digit codes: a made-up code
+would either fail to resolve (making the crosswalk look broken) or collide with a real
+metro (making a synthetic result look attributable to a real place).
+
+**The first MSA run did not fail — and that was the problem.** It produced a
+plausible-looking 182-row panel in which exposure was frozen for 102 MSAs, outcomes came
+from 26 states, and the teleworkable control matched 0 of 182 rows. Nothing raised,
+because a left join on disjoint keys is a legal operation. Three defects were behind it:
+
+1. The FHFA HPI loader was hard-coded to `level="State"` regardless of the config.
+2. `active_stock.parquet` had a single path for both geographies, so a state run and an
+   MSA run silently overwrote each other. It is now `active_stock_{geography}.parquet`.
+3. Nothing checked that a source's keys and the panel's keys were the same *kind* of
+   thing.
+
+`_assert_geography_compatible` now runs before every join and raises
+`GeographyMismatchError` on disjoint keys. It deliberately does **not** subclass
+`ValueError`, because the per-source handlers catch `ValueError` and downgrade it to
+"source unavailable" — correct for a missing file, wrong for a mis-specified run.
+Optional sources (LAUS, teleworkable) are dropped with a note naming the threat left
+uncontrolled rather than raising.
+
+Result: `configs/msa.yaml` now stops with an actionable message naming the offending
+source and both key shapes. Remaining work is three adapters (HMDA `msamds`, Census BPS
+MSA files, BLS LAUS `LAUMT` series) plus a rule for the **47 metro CBSAs that span more
+than one state**. Recorded in `STATUS.md` §8.

@@ -6,8 +6,8 @@
 
 | | |
 |---|---|
-| Generated | `2026-08-11T17:45:24+00:00` |
-| Git commit | `d85ce3220ad4-dirty` |
+| Generated | `2026-08-13T09:34:48+00:00` |
+| Git commit | `2dbe7119f97f-dirty` |
 | Config | `sample` (digest `9fb71e2454f98608`) |
 | Data class | **SYNTHETIC** |
 | Data period | `2021-01..2024-12` |
@@ -31,21 +31,22 @@ The event-study runner assigns the tier from the data: a pre-trend test that fai
 
 | outcome | tier assigned | pre-trend p | reason |
 |---|---|---|---|
-| `es_hpi_growth` | `descriptive` | 0.002 | pre-trend test failed |
-| `es_log_permits_1unit` | `descriptive` | 0.011 | pre-trend test failed |
+| `es_hpi_growth` | `descriptive` | 0.150 | pre-trend test failed |
+| `es_log_permits_5plus` | `descriptive` | 0.057 | pre-trend test failed |
 | `es_monthly_hpi_growth_12m` | `descriptive` | — | not testable: no pre-period other than the reference |
 | `es_monthly_permits_1unit` | `descriptive` | — | not testable: no pre-period other than the reference |
 | `es_monthly_permits_5plus` | `descriptive` | — | not testable: no pre-period other than the reference |
 
 ## 2. Robustness grid
 
-Baseline coefficient **0.0010** (s.e. 0.0191) across 42 cells.
+Baseline coefficient **0.0089** (s.e. 0.0168) across 42 cells.
 
 | verdict | cells |
 |---|---|
-| `insignificant` | 32 |
+| `insignificant` | 30 |
 | `consistent` | 4 |
 | `not_estimable` | 2 |
+| `sign_flip` | 2 |
 | `placebo_pass` | 2 |
 | `placebo_FAIL` | 2 |
 
@@ -59,73 +60,75 @@ Baseline coefficient **0.0010** (s.e. 0.0191) across 42 cells.
 - `placebo_pass`: placebo is insignificant, as it should be
 - `placebo_FAIL`: placebo is SIGNIFICANT -- evidence against the interpretation
 
-### Flagged cells (4)
+### Flagged cells (6)
 
 | axis | variant | outcome | coef | s.e. | t | verdict | rationale |
 |---|---|---|---|---|---|---|---|
+| exposure_definition | locked_share_upb_300 | `log_purchase_originations` | -0.0310 | 0.0180 | -1.73 | **sign_flip** | alternative lock-in exposure measure |
+| threshold | locked_share_upb_300bp | `log_purchase_originations` | -0.0310 | 0.0180 | -1.73 | **sign_flip** | locked_share_upb at a 300 bp threshold |
 | hmda_coverage | regime=post_2018_rule | `log_purchase_originations` | — | — | — | **not_estimable** | HMDA reporting-threshold regimes are not comparable; a within-regime estimate avoids splicing across the break |
 | hmda_coverage | regime=threshold_100_closed_end | `log_purchase_originations` | — | — | — | **not_estimable** | HMDA reporting-threshold regimes are not comparable; a within-regime estimate avoids splicing across the break |
 | placebo_date | placebo shock at 2018-01 | `log_purchase_originations` | — | — | — | **placebo_FAIL** | a placebo PASSES when it is insignificant; a significant effect of the same sign is evidence against the lock-in interpretation |
-| placebo_outcome | denial_rate | `denial_rate` | -0.0014 | 0.0007 | -1.90 | **placebo_FAIL** | the denial rate proxies credit conditions, not lock-in |
+| placebo_outcome | denial_rate | `denial_rate` | -0.0024 | 0.0008 | -2.90 | **placebo_FAIL** | the denial rate proxies credit conditions, not lock-in |
 
 ### Every cell
 
 | axis | variant | outcome | coef | s.e. | t | n | clusters | verdict |
 |---|---|---|---|---|---|---|---|---|
-| baseline | baseline | `log_purchase_originations` | 0.0010 | 0.0191 | 0.05 | 156 | 26 | `insignificant` |
-| exposure_definition | locked_share_count_200 | `log_purchase_originations` | -0.0128 | 0.0182 | -0.70 | 156 | 26 | `insignificant` |
-| exposure_definition | locked_share_upb_100 | `log_purchase_originations` | 0.0211 | 0.0052 | 4.09 | 156 | 26 | `consistent` |
-| exposure_definition | locked_share_upb_300 | `log_purchase_originations` | 0.0130 | 0.0195 | 0.67 | 156 | 26 | `insignificant` |
-| exposure_definition | mean_payment_gap | `log_purchase_originations` | 0.0298 | 0.0114 | 2.61 | 156 | 26 | `consistent` |
-| threshold | locked_share_upb_100bp | `log_purchase_originations` | 0.0211 | 0.0052 | 4.09 | 156 | 26 | `consistent` |
-| threshold | locked_share_count_100bp | `log_purchase_originations` | 0.0158 | 0.0115 | 1.38 | 156 | 26 | `insignificant` |
-| threshold | coupon_share_below_100bp | `log_purchase_originations` | 0.0158 | 0.0115 | 1.38 | 156 | 26 | `insignificant` |
-| threshold | locked_share_count_200bp | `log_purchase_originations` | -0.0128 | 0.0182 | -0.70 | 156 | 26 | `insignificant` |
-| threshold | coupon_share_below_200bp | `log_purchase_originations` | -0.0128 | 0.0182 | -0.70 | 156 | 26 | `insignificant` |
-| threshold | locked_share_upb_300bp | `log_purchase_originations` | 0.0130 | 0.0195 | 0.67 | 156 | 26 | `insignificant` |
-| threshold | locked_share_count_300bp | `log_purchase_originations` | 0.0105 | 0.0200 | 0.52 | 156 | 26 | `insignificant` |
-| threshold | coupon_share_below_300bp | `log_purchase_originations` | 0.0105 | 0.0200 | 0.52 | 156 | 26 | `insignificant` |
-| threshold | locked_share_upb_400bp | `log_purchase_originations` | 0.0068 | 0.0194 | 0.35 | 156 | 26 | `insignificant` |
-| threshold | locked_share_count_400bp | `log_purchase_originations` | 0.0055 | 0.0199 | 0.28 | 156 | 26 | `insignificant` |
-| threshold | coupon_share_below_400bp | `log_purchase_originations` | 0.0055 | 0.0199 | 0.28 | 156 | 26 | `insignificant` |
-| weighting | loan-count weights | `log_purchase_originations` | -0.0128 | 0.0182 | -0.70 | 156 | 26 | `insignificant` |
-| weighting | UPB weights | `log_purchase_originations` | 0.0010 | 0.0191 | 0.05 | 156 | 26 | `insignificant` |
-| controls | no pre-period controls | `log_purchase_originations` | 0.0010 | 0.0190 | 0.05 | 156 | 26 | `insignificant` |
-| controls | all pre-period controls | `log_purchase_originations` | 0.0017 | 0.0180 | 0.10 | 156 | 26 | `insignificant` |
-| pre_shock_date | exposure frozen at 2021-06 | `log_purchase_originations` | 0.0013 | 0.0183 | 0.07 | 156 | 26 | `insignificant` |
-| pre_shock_date | exposure frozen at 2022-03 | `log_purchase_originations` | -0.0034 | 0.0178 | -0.19 | 156 | 26 | `insignificant` |
-| market_rate_series | pmms15 instead of pmms30 | `log_purchase_originations` | 0.0073 | 0.0198 | 0.37 | 156 | 26 | `insignificant` |
-| hpi_concept | pandemic control from all-transactions HPI | `log_purchase_originations` | 0.0010 | 0.0191 | 0.05 | 156 | 26 | `insignificant` |
-| hpi_concept | pandemic control from expanded-data HPI | `log_purchase_originations` | 0.0010 | 0.0191 | 0.05 | 156 | 26 | `insignificant` |
-| loan_subsample | purchase-origination loans only | `log_purchase_originations` | 0.0083 | 0.0164 | 0.51 | 156 | 26 | `insignificant` |
-| loan_subsample | primary residence only | `log_purchase_originations` | 0.0039 | 0.0185 | 0.21 | 156 | 26 | `insignificant` |
-| loan_subsample | excluding manufactured housing | `log_purchase_originations` | 0.0005 | 0.0191 | 0.03 | 156 | 26 | `insignificant` |
-| sample | exclude top-decile 2019-21 price-boom markets | `log_purchase_originations` | 0.0013 | 0.0210 | 0.06 | 138 | 23 | `insignificant` |
-| sample | exclude top-decile refinance-intensity markets | `log_purchase_originations` | 0.0043 | 0.0193 | 0.22 | 138 | 23 | `insignificant` |
+| baseline | baseline | `log_purchase_originations` | 0.0089 | 0.0168 | 0.53 | 150 | 25 | `insignificant` |
+| exposure_definition | locked_share_count_200 | `log_purchase_originations` | 0.0110 | 0.0202 | 0.54 | 150 | 25 | `insignificant` |
+| exposure_definition | locked_share_upb_100 | `log_purchase_originations` | -0.0062 | 0.0124 | -0.50 | 150 | 25 | `insignificant` |
+| exposure_definition | locked_share_upb_300 | `log_purchase_originations` | -0.0310 | 0.0180 | -1.73 | 150 | 25 | `sign_flip` |
+| exposure_definition | mean_payment_gap | `log_purchase_originations` | 0.0076 | 0.0147 | 0.52 | 150 | 25 | `insignificant` |
+| threshold | locked_share_upb_100bp | `log_purchase_originations` | -0.0062 | 0.0124 | -0.50 | 150 | 25 | `insignificant` |
+| threshold | locked_share_count_100bp | `log_purchase_originations` | -0.0025 | 0.0139 | -0.18 | 150 | 25 | `insignificant` |
+| threshold | coupon_share_below_100bp | `log_purchase_originations` | -0.0025 | 0.0139 | -0.18 | 150 | 25 | `insignificant` |
+| threshold | locked_share_count_200bp | `log_purchase_originations` | 0.0110 | 0.0202 | 0.54 | 150 | 25 | `insignificant` |
+| threshold | coupon_share_below_200bp | `log_purchase_originations` | 0.0110 | 0.0202 | 0.54 | 150 | 25 | `insignificant` |
+| threshold | locked_share_upb_300bp | `log_purchase_originations` | -0.0310 | 0.0180 | -1.73 | 150 | 25 | `sign_flip` |
+| threshold | locked_share_count_300bp | `log_purchase_originations` | -0.0310 | 0.0195 | -1.60 | 150 | 25 | `insignificant` |
+| threshold | coupon_share_below_300bp | `log_purchase_originations` | -0.0310 | 0.0195 | -1.60 | 150 | 25 | `insignificant` |
+| threshold | locked_share_upb_400bp | `log_purchase_originations` | 0.0212 | 0.0131 | 1.62 | 150 | 25 | `insignificant` |
+| threshold | locked_share_count_400bp | `log_purchase_originations` | 0.0247 | 0.0133 | 1.85 | 150 | 25 | `consistent` |
+| threshold | coupon_share_below_400bp | `log_purchase_originations` | 0.0247 | 0.0133 | 1.85 | 150 | 25 | `consistent` |
+| weighting | loan-count weights | `log_purchase_originations` | 0.0110 | 0.0202 | 0.54 | 150 | 25 | `insignificant` |
+| weighting | UPB weights | `log_purchase_originations` | 0.0089 | 0.0168 | 0.53 | 150 | 25 | `insignificant` |
+| controls | no pre-period controls | `log_purchase_originations` | 0.0162 | 0.0152 | 1.07 | 150 | 25 | `insignificant` |
+| controls | all pre-period controls | `log_purchase_originations` | 0.0270 | 0.0162 | 1.67 | 150 | 25 | `consistent` |
+| pre_shock_date | exposure frozen at 2021-06 | `log_purchase_originations` | 0.0175 | 0.0178 | 0.99 | 150 | 25 | `insignificant` |
+| pre_shock_date | exposure frozen at 2022-03 | `log_purchase_originations` | 0.0093 | 0.0155 | 0.60 | 150 | 25 | `insignificant` |
+| market_rate_series | pmms15 instead of pmms30 | `log_purchase_originations` | -0.0078 | 0.0185 | -0.42 | 150 | 25 | `insignificant` |
+| hpi_concept | pandemic control from all-transactions HPI | `log_purchase_originations` | 0.0159 | 0.0157 | 1.02 | 150 | 25 | `insignificant` |
+| hpi_concept | pandemic control from expanded-data HPI | `log_purchase_originations` | 0.0103 | 0.0158 | 0.65 | 150 | 25 | `insignificant` |
+| loan_subsample | purchase-origination loans only | `log_purchase_originations` | 0.0122 | 0.0194 | 0.63 | 150 | 25 | `insignificant` |
+| loan_subsample | primary residence only | `log_purchase_originations` | 0.0039 | 0.0174 | 0.22 | 150 | 25 | `insignificant` |
+| loan_subsample | excluding manufactured housing | `log_purchase_originations` | 0.0081 | 0.0164 | 0.49 | 150 | 25 | `insignificant` |
+| sample | exclude top-decile 2019-21 price-boom markets | `log_purchase_originations` | 0.0031 | 0.0188 | 0.16 | 132 | 22 | `insignificant` |
+| sample | exclude top-decile refinance-intensity markets | `log_purchase_originations` | 0.0123 | 0.0170 | 0.72 | 132 | 22 | `insignificant` |
 | hmda_coverage | regime=post_2018_rule | `log_purchase_originations` | — | — | — | — | — | `not_estimable` |
 | hmda_coverage | regime=threshold_100_closed_end | `log_purchase_originations` | — | — | — | — | — | `not_estimable` |
-| panel_balance | balanced panel (6 years) | `log_purchase_originations` | 0.0010 | 0.0191 | 0.05 | 156 | 26 | `insignificant` |
+| panel_balance | balanced panel (6 years) | `log_purchase_originations` | 0.0089 | 0.0168 | 0.53 | 150 | 25 | `insignificant` |
 | placebo_date | placebo shock at 2018-01 | `log_purchase_originations` | — | — | — | — | — | `placebo_FAIL` |
-| placebo_date | placebo shock at 2019-06 | `log_purchase_originations` | 0.0004 | 0.0112 | 0.03 | 104 | 26 | `placebo_pass` |
-| placebo_outcome | log_permits_5plus | `log_permits_5plus` | -0.0618 | 0.0452 | -1.37 | 156 | 26 | `placebo_pass` |
-| placebo_outcome | denial_rate | `denial_rate` | -0.0014 | 0.0007 | -1.90 | 156 | 26 | `placebo_FAIL` |
-| other_outcome | log_refi_originations | `log_refi_originations` | -0.0579 | 0.0657 | -0.88 | 156 | 26 | `insignificant` |
-| other_outcome | hpi_growth | `hpi_growth` | 0.0050 | 0.0041 | 1.23 | 182 | 26 | `insignificant` |
-| other_outcome | log_permits_1unit | `log_permits_1unit` | -0.0276 | 0.0169 | -1.63 | 156 | 26 | `insignificant` |
-| other_outcome | log_permits_5plus | `log_permits_5plus` | -0.0618 | 0.0452 | -1.37 | 156 | 26 | `insignificant` |
-| other_outcome | denial_rate | `denial_rate` | -0.0014 | 0.0007 | -1.90 | 156 | 26 | `consistent` |
+| placebo_date | placebo shock at 2019-06 | `log_purchase_originations` | -0.0099 | 0.0072 | -1.38 | 100 | 25 | `placebo_pass` |
+| placebo_outcome | log_permits_5plus | `log_permits_5plus` | -0.0297 | 0.0619 | -0.48 | 150 | 25 | `placebo_pass` |
+| placebo_outcome | denial_rate | `denial_rate` | -0.0024 | 0.0008 | -2.90 | 150 | 25 | `placebo_FAIL` |
+| other_outcome | log_refi_originations | `log_refi_originations` | 0.0600 | 0.0505 | 1.19 | 150 | 25 | `insignificant` |
+| other_outcome | hpi_growth | `hpi_growth` | 0.0038 | 0.0034 | 1.09 | 175 | 25 | `insignificant` |
+| other_outcome | log_permits_1unit | `log_permits_1unit` | 0.0017 | 0.0198 | 0.09 | 150 | 25 | `insignificant` |
+| other_outcome | log_permits_5plus | `log_permits_5plus` | -0.0297 | 0.0619 | -0.48 | 150 | 25 | `insignificant` |
+| other_outcome | denial_rate | `denial_rate` | -0.0024 | 0.0008 | -2.90 | 150 | 25 | `consistent` |
 
 ## 3. Loan-level sensitivity to modelling choices
 
 Three checks re-estimate the headline discrete-time prepayment hazard under alternatives the baseline deliberately does **not** use. Each corresponds to a choice documented elsewhere as an *assumption* rather than a fact.
 
-Baseline rate-gap coefficient: **-0.5248** (s.e. 0.0198).
+Baseline rate-gap coefficient: **-0.5532** (s.e. 0.0198).
 
 | cell | coefficient | s.e. | verdict |
 |---|---|---|---|
-| `admin_removals_as_prepayment` | -0.4353 | 0.0170 | **large_shift** |
-| `payment_gap_fresh_term` | -1.4727 | 0.0780 | **large_shift** |
-| `month_end_rate_alignment` | -0.4896 | 0.0189 | **moderate_shift** |
+| `admin_removals_as_prepayment` | -0.4555 | 0.0171 | **large_shift** |
+| `payment_gap_fresh_term` | -1.5600 | 0.0847 | **large_shift** |
+| `month_end_rate_alignment` | -0.5206 | 0.0190 | **moderate_shift** |
 
 Verdicts are measured in **baseline standard errors**:
 
@@ -180,8 +183,8 @@ Not failures of execution — failures of data availability. Recording them prev
 | `robustness/robustness_grid` | `quasi_experimental` | U.S. states present in both the Freddie Mac loan sample and the public… | geography-year (unweighted OLS), cluster |
 | `eventstudy/es_denial_rate` | `quasi_experimental` | U.S. states present in both the Freddie Mac loan sample and the public… | geography-year (unweighted OLS) |
 | `eventstudy/es_hpi_growth` | `descriptive` | U.S. states present in both the Freddie Mac loan sample and the public… | geography-year (unweighted OLS) |
-| `eventstudy/es_log_permits_1unit` | `descriptive` | U.S. states present in both the Freddie Mac loan sample and the public… | geography-year (unweighted OLS) |
-| `eventstudy/es_log_permits_5plus` | `quasi_experimental` | U.S. states present in both the Freddie Mac loan sample and the public… | geography-year (unweighted OLS) |
+| `eventstudy/es_log_permits_1unit` | `quasi_experimental` | U.S. states present in both the Freddie Mac loan sample and the public… | geography-year (unweighted OLS) |
+| `eventstudy/es_log_permits_5plus` | `descriptive` | U.S. states present in both the Freddie Mac loan sample and the public… | geography-year (unweighted OLS) |
 | `eventstudy/es_log_purchase_originations` | `quasi_experimental` | U.S. states present in both the Freddie Mac loan sample and the public… | geography-year (unweighted OLS) |
 | `eventstudy/es_log_refi_originations` | `quasi_experimental` | U.S. states present in both the Freddie Mac loan sample and the public… | geography-year (unweighted OLS) |
 | `eventstudy/es_monthly_hpi_growth_12m` | `descriptive` | U.S. states present in both the Freddie Mac loan sample and the public… | geography-event-year (unweighted OLS) |
@@ -193,17 +196,21 @@ Not failures of execution — failures of data availability. Recording them prev
 
 | dataset | schema@retrieved#checksum |
 |---|---|
-| `active_mortgage_stock` | `active-stock-v1@2026-08-11T17:43:39+00:00#336fc723d417` |
+| `active_mortgage_stock` | `active-stock-v1@2026-08-13T09:32:43+00:00#f36e659e2b57` |
 | `bls_laus` | `bls-api-v2-laus-state-v1@2026-08-11T17:41:19+00:00#8cd9335cc5ae` |
-| `census_bps` | `census-bps-state-monthly-v1@2026-08-11T00:56:23+00:00#a88b1ad2c127` |
-| `fhfa_hpi` | `fhfa-hpi-master-v1@2026-08-11T00:54:48+00:00#8ab042e042ff` |
-| `freddie_llds_synthetic_fixtures` | `freddie-llds-2026-08-10@2026-08-11T05:49:57+00:00#6b358e5f7d60` |
-| `hmda` | `cfpb-data-browser-aggregations-v2@2026-08-11T01:07:30+00:00#6946b46cf136` |
-| `loan_episodes` | `loan-episodes-v1@2026-08-11T05:49:58+00:00#7487945b2064` |
-| `loan_events` | `loan-events-v1@2026-08-11T05:49:57+00:00#4a00c7112e61` |
-| `local_market_panel_annual` | `local-panel-v1@2026-08-11T17:43:39+00:00#f0a464fb2370` |
-| `local_market_panel_monthly` | `local-panel-v1@2026-08-11T17:43:39+00:00#4d56f18bd056` |
-| `pmms` | `pmms-history-v1@2026-08-11T00:54:48+00:00#c74cccece4a6` |
+| `census_bps` | `census-bps-state-monthly-v1@2026-08-13T09:27:18+00:00#d3e4a46f74a5` |
+| `fhfa_hpi` | `fhfa-hpi-master-v1@2026-08-13T09:25:46+00:00#8ab042e042ff` |
+| `freddie_llds_synthetic_fixtures` | `freddie-llds-2026-08-10@2026-08-13T09:29:56+00:00#68da95265c31` |
+| `hmda` | `cfpb-data-browser-aggregations-v2@2026-08-13T09:27:18+00:00#6946b46cf136` |
+| `loan_episodes` | `loan-episodes-v1@2026-08-13T09:32:34+00:00#5e658b4c1b59` |
+| `loan_events` | `loan-events-v1@2026-08-13T09:30:24+00:00#aada815c333d` |
+| `local_market_panel_annual` | `local-panel-v1@2026-08-13T09:32:43+00:00#d56df8b8380b` |
+| `local_market_panel_monthly` | `local-panel-v1@2026-08-13T09:32:43+00:00#c6946b128163` |
+| `omb_cbsa_crosswalk` | `census-list1-v1@2026-08-13T09:27:19+00:00#222ea05e6b27` |
+| `omb_cbsa_stability` | `census-list1-v1@2026-08-13T09:27:19+00:00#30514ffa77ff` |
+| `pmms` | `pmms-history-v1@2026-08-13T09:25:46+00:00#c74cccece4a6` |
+| `teleworkable_msa` | `dingel-neiman-2020-v1@2026-08-13T09:27:18+00:00#e19e017515e6` |
+| `teleworkable_state` | `dingel-neiman-2020-v1@2026-08-13T09:27:18+00:00#f663415361e4` |
 
 ---
 

@@ -6,8 +6,8 @@
 
 | | |
 |---|---|
-| Generated | `2026-08-11T17:45:24+00:00` |
-| Git commit | `d85ce3220ad4-dirty` |
+| Generated | `2026-08-13T09:34:48+00:00` |
+| Git commit | `2dbe7119f97f-dirty` |
 | Config | `sample` (digest `9fb71e2454f98608`) |
 | Data class | **SYNTHETIC** |
 | Data period | `2021-01..2024-12` |
@@ -38,19 +38,19 @@
 
 ## 2. Scenario ranking
 
-Baseline month `2024-12-01`, 7,590 active loans.
+Baseline month `2024-12-01`, 7,592 active loans.
 
 | scenario | policy | additional monthly prepayments | % change | additional monthly prepaid UPB |
 |---|---|---|---|---|
-| `no_lock_in` | no-lock-in counterfactual (bounding exercise) | 79.3 | 514.0% | $15,625,058 |
-| `market_rate_-200bp` | market mortgage rate declines | 28.5 | 184.5% | $5,598,233 |
-| `partial_portability` | existing mortgages become partially portable | 22.4 | 145.3% | $4,414,848 |
-| `temporary_seller_credit` | temporary seller credit | 21.8 | 141.3% | $2,916,057 |
-| `conditional_assumability` | existing mortgages become assumable under conditions | 10.9 | 70.9% | $2,152,326 |
-| `market_rate_-100bp` | market mortgage rate declines | 10.6 | 68.8% | $2,086,256 |
-| `mortgage_rate_buydown` | mortgage-rate buydown | 10.6 | 68.8% | $2,086,256 |
-| `market_rate_-50bp` | market mortgage rate declines | 4.6 | 29.9% | $907,813 |
-| `targeted_starter_home_buydown` | targeted policy for starter homes | 3.5 | 23.0% | $390,943 |
+| `no_lock_in` | no-lock-in counterfactual (bounding exercise) | 85.0 | 584.4% | $17,083,131 |
+| `market_rate_-200bp` | market mortgage rate declines | 29.2 | 201.1% | $5,856,084 |
+| `partial_portability` | existing mortgages become partially portable | 23.1 | 158.8% | $4,639,157 |
+| `temporary_seller_credit` | temporary seller credit | 21.3 | 146.4% | $2,931,589 |
+| `conditional_assumability` | existing mortgages become assumable under conditions | 11.1 | 76.4% | $2,230,923 |
+| `market_rate_-100bp` | market mortgage rate declines | 10.7 | 73.6% | $2,143,834 |
+| `mortgage_rate_buydown` | mortgage-rate buydown | 10.7 | 73.6% | $2,143,834 |
+| `market_rate_-50bp` | market mortgage rate declines | 4.6 | 31.8% | $925,408 |
+| `targeted_starter_home_buydown` | targeted policy for starter homes | 3.4 | 23.6% | $382,462 |
 | `elevated_supply_elasticity` | increased residential construction responsiveness | 0.0 | 0% | $0 |
 
 > The ORDERING is the useful output. Magnitudes inherit the sampling error of the hazard coefficients, the arbitrariness of the calibrated elasticities, and an unidentified prepayment-to-transaction share.
@@ -76,9 +76,9 @@ Baseline month `2024-12-01`, 7,590 active loans.
 |---|---|
 | `source_artifact` | hazards/dt_logit_prepayment |
 | `model` | discrete-time logit hazard |
-| `n_obs` | 270,684 |
-| `n_events` | 2,121 |
-| `standard_errors` | clustered by loan_seq_no (10,320 clusters) |
+| `n_obs` | 269,811 |
+| `n_events` | 2,116 |
+| `standard_errors` | clustered by loan_seq_no (10,312 clusters) |
 | `evidence_tier_of_input` | hazard_association |
 
 ## 3. Scenario detail
@@ -86,9 +86,9 @@ Baseline month `2024-12-01`, 7,590 active loans.
 ### `conditional_assumability` — existing mortgages become assumable under conditions
 
 - Implementation: same functional form as portability but a lower take-up share, reflecting that an assumption requires a buyer who qualifies AND can fund the equity gap in cash or a second lien
-- Baseline expected monthly prepayments: **15.4**
-- Scenario expected monthly prepayments: **26.3**
-- Modelled additional monthly prepayments: **10.9** (70.9%)
+- Baseline expected monthly prepayments: **14.5**
+- Scenario expected monthly prepayments: **25.6**
+- Modelled additional monthly prepayments: **11.1** (76.4%)
 - `take_up_share`: 0.3000
 - `binding_constraint`: the buyer must cover the difference between the price and the assumed balance. In a market where prices have risen since origination, that gap is large -- which is precisely why assumability take-up would be low.
 
@@ -96,9 +96,9 @@ Transaction / price / construction mapping across the unidentified prepayment-to
 
 | assumed move share | additional transactions/month | % change in flow | log price change | % change in permits |
 |---|---|---|---|---|
-| 0.1500 | 1.6 | 10.63% | 0.06643 | 10.63% |
-| 0.3000 | 3.3 | 21.26% | 0.13287 | 21.26% |
-| 0.5000 | 5.5 | 35.43% | 0.22145 | 35.43% |
+| 0.1500 | 1.7 | 11.46% | 0.07161 | 11.46% |
+| 0.3000 | 3.3 | 22.92% | 0.14323 | 22.92% |
+| 0.5000 | 5.6 | 38.19% | 0.23872 | 38.19% |
 
 Caveats:
 - MODEL-DEPENDENT. Not a forecast.
@@ -108,18 +108,18 @@ Caveats:
 ### `no_lock_in` — no-lock-in counterfactual (bounding exercise)
 
 - Implementation: the rate gap is set to zero for every loan, i.e. every borrower could refinance the same balance at their own note rate. This is the upper bound of the modelled lock-in channel, not a policy.
-- Baseline expected monthly prepayments: **15.4**
-- Scenario expected monthly prepayments: **94.7**
-- Modelled additional monthly prepayments: **79.3** (514.0%)
-- `mean_gap_removed_pp`: 3.5155
+- Baseline expected monthly prepayments: **14.5**
+- Scenario expected monthly prepayments: **99.5**
+- Modelled additional monthly prepayments: **85.0** (584.4%)
+- `mean_gap_removed_pp`: 3.5203
 
 Transaction / price / construction mapping across the unidentified prepayment-to-transaction share:
 
 | assumed move share | additional transactions/month | % change in flow | log price change | % change in permits |
 |---|---|---|---|---|
-| 0.1500 | 11.9 | 77.10% | 0.48186 | 77.10% |
-| 0.3000 | 23.8 | 154.20% | 0.96373 | 154.20% |
-| 0.5000 | 39.6 | 256.99% | 1.60622 | 256.99% |
+| 0.1500 | 12.7 | 87.66% | 0.54789 | 87.66% |
+| 0.3000 | 25.5 | 175.33% | 1.09579 | 175.33% |
+| 0.5000 | 42.5 | 292.21% | 1.82631 | 292.21% |
 
 Caveats:
 - MODEL-DEPENDENT. Not a forecast.
@@ -130,9 +130,9 @@ Caveats:
 ### `partial_portability` — existing mortgages become partially portable
 
 - Implementation: the effective rate gap is scaled by (1 - take_up_share), representing a share of borrowers who can carry their note rate to a new property
-- Baseline expected monthly prepayments: **15.4**
-- Scenario expected monthly prepayments: **37.8**
-- Modelled additional monthly prepayments: **22.4** (145.3%)
+- Baseline expected monthly prepayments: **14.5**
+- Scenario expected monthly prepayments: **37.6**
+- Modelled additional monthly prepayments: **23.1** (158.8%)
 - `take_up_share`: 0.5000
 - `who_bears_the_cost`: the investor or guarantor holding the below-market coupon; portability transfers that loss rather than eliminating it. Not modelled here.
 
@@ -140,9 +140,9 @@ Transaction / price / construction mapping across the unidentified prepayment-to
 
 | assumed move share | additional transactions/month | % change in flow | log price change | % change in permits |
 |---|---|---|---|---|
-| 0.1500 | 3.4 | 21.80% | 0.13624 | 21.80% |
-| 0.3000 | 6.7 | 43.60% | 0.27248 | 43.60% |
-| 0.5000 | 11.2 | 72.66% | 0.45413 | 72.66% |
+| 0.1500 | 3.5 | 23.82% | 0.14888 | 23.82% |
+| 0.3000 | 6.9 | 47.64% | 0.29775 | 47.64% |
+| 0.5000 | 11.5 | 79.40% | 0.49626 | 79.40% |
 
 Caveats:
 - MODEL-DEPENDENT. Not a forecast.
@@ -153,22 +153,22 @@ Caveats:
 ### `market_rate_-100bp` — market mortgage rate declines
 
 - Implementation: the point-in-time rate gap shifts by the shock for every loan; note rates are unchanged
-- Baseline expected monthly prepayments: **15.4**
-- Scenario expected monthly prepayments: **26.0**
-- Modelled additional monthly prepayments: **10.6** (68.8%)
+- Baseline expected monthly prepayments: **14.5**
+- Scenario expected monthly prepayments: **25.2**
+- Modelled additional monthly prepayments: **10.7** (73.6%)
 - `shock_bp`: -100
-- `mean_gap_before`: 3.5155
-- `mean_gap_after`: 2.5155
-- `mean_payment_gap_before`: 399.6323
-- `mean_payment_gap_after`: 278.9664
+- `mean_gap_before`: 3.5203
+- `mean_gap_after`: 2.5203
+- `mean_payment_gap_before`: 398.7933
+- `mean_payment_gap_after`: 278.6128
 
 Transaction / price / construction mapping across the unidentified prepayment-to-transaction share:
 
 | assumed move share | additional transactions/month | % change in flow | log price change | % change in permits |
 |---|---|---|---|---|
-| 0.1500 | 1.6 | 10.31% | 0.06446 | 10.31% |
-| 0.3000 | 3.2 | 20.63% | 0.12892 | 20.63% |
-| 0.5000 | 5.3 | 34.38% | 0.21487 | 34.38% |
+| 0.1500 | 1.6 | 11.04% | 0.06902 | 11.04% |
+| 0.3000 | 3.2 | 22.09% | 0.13804 | 22.09% |
+| 0.5000 | 5.4 | 36.81% | 0.23007 | 36.81% |
 
 Caveats:
 - MODEL-DEPENDENT. Not a forecast.
@@ -178,22 +178,22 @@ Caveats:
 ### `market_rate_-200bp` — market mortgage rate declines
 
 - Implementation: the point-in-time rate gap shifts by the shock for every loan; note rates are unchanged
-- Baseline expected monthly prepayments: **15.4**
-- Scenario expected monthly prepayments: **43.9**
-- Modelled additional monthly prepayments: **28.5** (184.5%)
+- Baseline expected monthly prepayments: **14.5**
+- Scenario expected monthly prepayments: **43.8**
+- Modelled additional monthly prepayments: **29.2** (201.1%)
 - `shock_bp`: -200
-- `mean_gap_before`: 3.5155
-- `mean_gap_after`: 1.5155
-- `mean_payment_gap_before`: 399.6323
-- `mean_payment_gap_after`: 163.5840
+- `mean_gap_before`: 3.5203
+- `mean_gap_after`: 1.5203
+- `mean_payment_gap_before`: 398.7933
+- `mean_payment_gap_after`: 163.6931
 
 Transaction / price / construction mapping across the unidentified prepayment-to-transaction share:
 
 | assumed move share | additional transactions/month | % change in flow | log price change | % change in permits |
 |---|---|---|---|---|
-| 0.1500 | 4.3 | 27.68% | 0.17297 | 27.68% |
-| 0.3000 | 8.5 | 55.35% | 0.34594 | 55.35% |
-| 0.5000 | 14.2 | 92.25% | 0.57657 | 92.25% |
+| 0.1500 | 4.4 | 30.17% | 0.18854 | 30.17% |
+| 0.3000 | 8.8 | 60.33% | 0.37709 | 60.33% |
+| 0.5000 | 14.6 | 100.56% | 0.62848 | 100.56% |
 
 Caveats:
 - MODEL-DEPENDENT. Not a forecast.
@@ -203,22 +203,22 @@ Caveats:
 ### `market_rate_-50bp` — market mortgage rate declines
 
 - Implementation: the point-in-time rate gap shifts by the shock for every loan; note rates are unchanged
-- Baseline expected monthly prepayments: **15.4**
-- Scenario expected monthly prepayments: **20.0**
-- Modelled additional monthly prepayments: **4.6** (29.9%)
+- Baseline expected monthly prepayments: **14.5**
+- Scenario expected monthly prepayments: **19.2**
+- Modelled additional monthly prepayments: **4.6** (31.8%)
 - `shock_bp`: -50
-- `mean_gap_before`: 3.5155
-- `mean_gap_after`: 3.0155
-- `mean_payment_gap_before`: 399.6323
-- `mean_payment_gap_after`: 338.6627
+- `mean_gap_before`: 3.5203
+- `mean_gap_after`: 3.0203
+- `mean_payment_gap_before`: 398.7933
+- `mean_payment_gap_after`: 338.0692
 
 Transaction / price / construction mapping across the unidentified prepayment-to-transaction share:
 
 | assumed move share | additional transactions/month | % change in flow | log price change | % change in permits |
 |---|---|---|---|---|
-| 0.1500 | 0.7 | 4.49% | 0.02805 | 4.49% |
-| 0.3000 | 1.4 | 8.98% | 0.05610 | 8.98% |
-| 0.5000 | 2.3 | 14.96% | 0.09350 | 14.96% |
+| 0.1500 | 0.7 | 4.77% | 0.02979 | 4.77% |
+| 0.3000 | 1.4 | 9.53% | 0.05959 | 9.53% |
+| 0.5000 | 2.3 | 15.89% | 0.09931 | 15.89% |
 
 Caveats:
 - MODEL-DEPENDENT. Not a forecast.
@@ -228,21 +228,21 @@ Caveats:
 ### `mortgage_rate_buydown` — mortgage-rate buydown
 
 - Implementation: the effective market rate faced by a mover falls by the buydown, reducing the rate gap one-for-one
-- Baseline expected monthly prepayments: **15.4**
-- Scenario expected monthly prepayments: **26.0**
-- Modelled additional monthly prepayments: **10.6** (68.8%)
+- Baseline expected monthly prepayments: **14.5**
+- Scenario expected monthly prepayments: **25.2**
+- Modelled additional monthly prepayments: **10.7** (73.6%)
 - `buydown_bp`: 100
-- `modelled_pv_fiscal_cost_per_assisted_loan`: 8,827.8281
+- `modelled_pv_fiscal_cost_per_assisted_loan`: 8,792.3150
 - `cost_note`: This is the cost per ASSISTED loan. Cost per ADDITIONAL transaction is much higher, because the great majority of assisted borrowers would have transacted regardless.
-- `modelled_cost_per_additional_prepayment`: 21,666.8377
+- `modelled_cost_per_additional_prepayment`: 20,734.9140
 
 Transaction / price / construction mapping across the unidentified prepayment-to-transaction share:
 
 | assumed move share | additional transactions/month | % change in flow | log price change | % change in permits |
 |---|---|---|---|---|
-| 0.1500 | 1.6 | 10.31% | 0.06446 | 10.31% |
-| 0.3000 | 3.2 | 20.63% | 0.12892 | 20.63% |
-| 0.5000 | 5.3 | 34.38% | 0.21487 | 34.38% |
+| 0.1500 | 1.6 | 11.04% | 0.06902 | 11.04% |
+| 0.3000 | 3.2 | 22.09% | 0.13804 | 22.09% |
+| 0.5000 | 5.4 | 36.81% | 0.23007 | 36.81% |
 
 Caveats:
 - MODEL-DEPENDENT. Not a forecast.
@@ -253,21 +253,21 @@ Caveats:
 ### `temporary_seller_credit` — temporary seller credit
 
 - Implementation: the lump sum is annuitised over the calibrated holding period and converted to the rate-gap change that produces the same monthly payment relief
-- Baseline expected monthly prepayments: **15.4**
-- Scenario expected monthly prepayments: **37.2**
-- Modelled additional monthly prepayments: **21.8** (141.3%)
+- Baseline expected monthly prepayments: **14.5**
+- Scenario expected monthly prepayments: **35.8**
+- Modelled additional monthly prepayments: **21.3** (146.4%)
 - `credit_dollars`: 10,000.0000
 - `mean_monthly_equivalent_dollars`: 136.6881
-- `mean_gap_equivalent_pp`: -1.4410
+- `mean_gap_equivalent_pp`: -1.4433
 - `fiscal_or_private_cost_per_transaction`: 10,000.0000
 
 Transaction / price / construction mapping across the unidentified prepayment-to-transaction share:
 
 | assumed move share | additional transactions/month | % change in flow | log price change | % change in permits |
 |---|---|---|---|---|
-| 0.1500 | 3.3 | 21.20% | 0.13249 | 21.20% |
-| 0.3000 | 6.5 | 42.40% | 0.26499 | 42.40% |
-| 0.5000 | 10.9 | 70.66% | 0.44165 | 70.66% |
+| 0.1500 | 3.2 | 21.97% | 0.13728 | 21.97% |
+| 0.3000 | 6.4 | 43.93% | 0.27456 | 43.93% |
+| 0.5000 | 10.6 | 73.22% | 0.45760 | 73.22% |
 
 Caveats:
 - MODEL-DEPENDENT. Not a forecast.
@@ -277,8 +277,8 @@ Caveats:
 ### `elevated_supply_elasticity` — increased residential construction responsiveness
 
 - Implementation: the borrower-level hazard is UNCHANGED; only the mapping from a transaction-flow shift into prices versus quantities changes
-- Baseline expected monthly prepayments: **15.4**
-- Scenario expected monthly prepayments: **15.4**
+- Baseline expected monthly prepayments: **14.5**
+- Scenario expected monthly prepayments: **14.5**
 - Modelled additional monthly prepayments: **0.0** (0%)
 - `supply_elasticity_baseline`: 1.0000
 - `supply_elasticity_scenario`: 1.5000
@@ -302,12 +302,12 @@ Caveats:
 ### `targeted_starter_home_buydown` — targeted policy for starter homes
 
 - Implementation: —
-- Baseline expected monthly prepayments: **15.4**
-- Scenario expected monthly prepayments: **19.0**
-- Modelled additional monthly prepayments: **3.5** (23.0%)
+- Baseline expected monthly prepayments: **14.5**
+- Scenario expected monthly prepayments: **18.0**
+- Modelled additional monthly prepayments: **3.4** (23.6%)
 - `targeting_rule`: loans in the bottom tercile of current balance
-- `balance_threshold`: 145,448.9733
-- `n_targeted`: 2,530
+- `balance_threshold`: 146,411.6867
+- `n_targeted`: 2,531
 - `buydown_bp`: 100
 - `distributional_note`: targeting by loan balance is a proxy for house price, not for borrower income or wealth. Low balance can mean a modest home OR a large down payment.
 
@@ -315,9 +315,9 @@ Transaction / price / construction mapping across the unidentified prepayment-to
 
 | assumed move share | additional transactions/month | % change in flow | log price change | % change in permits |
 |---|---|---|---|---|
-| 0.1500 | 0.5 | 3.44% | 0.02153 | 3.44% |
-| 0.3000 | 1.1 | 6.89% | 0.04306 | 6.89% |
-| 0.5000 | 1.8 | 11.48% | 0.07177 | 11.48% |
+| 0.1500 | 0.5 | 3.54% | 0.02212 | 3.54% |
+| 0.3000 | 1.0 | 7.08% | 0.04424 | 7.08% |
+| 0.5000 | 1.7 | 11.80% | 0.07373 | 11.80% |
 
 Caveats:
 - MODEL-DEPENDENT. Not a forecast.
@@ -356,17 +356,21 @@ The **ordering** of scenarios is the useful output. Any single magnitude should 
 
 | dataset | schema@retrieved#checksum |
 |---|---|
-| `active_mortgage_stock` | `active-stock-v1@2026-08-11T17:43:39+00:00#336fc723d417` |
+| `active_mortgage_stock` | `active-stock-v1@2026-08-13T09:32:43+00:00#f36e659e2b57` |
 | `bls_laus` | `bls-api-v2-laus-state-v1@2026-08-11T17:41:19+00:00#8cd9335cc5ae` |
-| `census_bps` | `census-bps-state-monthly-v1@2026-08-11T00:56:23+00:00#a88b1ad2c127` |
-| `fhfa_hpi` | `fhfa-hpi-master-v1@2026-08-11T00:54:48+00:00#8ab042e042ff` |
-| `freddie_llds_synthetic_fixtures` | `freddie-llds-2026-08-10@2026-08-11T05:49:57+00:00#6b358e5f7d60` |
-| `hmda` | `cfpb-data-browser-aggregations-v2@2026-08-11T01:07:30+00:00#6946b46cf136` |
-| `loan_episodes` | `loan-episodes-v1@2026-08-11T05:49:58+00:00#7487945b2064` |
-| `loan_events` | `loan-events-v1@2026-08-11T05:49:57+00:00#4a00c7112e61` |
-| `local_market_panel_annual` | `local-panel-v1@2026-08-11T17:43:39+00:00#f0a464fb2370` |
-| `local_market_panel_monthly` | `local-panel-v1@2026-08-11T17:43:39+00:00#4d56f18bd056` |
-| `pmms` | `pmms-history-v1@2026-08-11T00:54:48+00:00#c74cccece4a6` |
+| `census_bps` | `census-bps-state-monthly-v1@2026-08-13T09:27:18+00:00#d3e4a46f74a5` |
+| `fhfa_hpi` | `fhfa-hpi-master-v1@2026-08-13T09:25:46+00:00#8ab042e042ff` |
+| `freddie_llds_synthetic_fixtures` | `freddie-llds-2026-08-10@2026-08-13T09:29:56+00:00#68da95265c31` |
+| `hmda` | `cfpb-data-browser-aggregations-v2@2026-08-13T09:27:18+00:00#6946b46cf136` |
+| `loan_episodes` | `loan-episodes-v1@2026-08-13T09:32:34+00:00#5e658b4c1b59` |
+| `loan_events` | `loan-events-v1@2026-08-13T09:30:24+00:00#aada815c333d` |
+| `local_market_panel_annual` | `local-panel-v1@2026-08-13T09:32:43+00:00#d56df8b8380b` |
+| `local_market_panel_monthly` | `local-panel-v1@2026-08-13T09:32:43+00:00#c6946b128163` |
+| `omb_cbsa_crosswalk` | `census-list1-v1@2026-08-13T09:27:19+00:00#222ea05e6b27` |
+| `omb_cbsa_stability` | `census-list1-v1@2026-08-13T09:27:19+00:00#30514ffa77ff` |
+| `pmms` | `pmms-history-v1@2026-08-13T09:25:46+00:00#c74cccece4a6` |
+| `teleworkable_msa` | `dingel-neiman-2020-v1@2026-08-13T09:27:18+00:00#e19e017515e6` |
+| `teleworkable_state` | `dingel-neiman-2020-v1@2026-08-13T09:27:18+00:00#f663415361e4` |
 
 ---
 

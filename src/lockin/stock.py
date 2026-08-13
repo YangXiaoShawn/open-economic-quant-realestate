@@ -50,6 +50,17 @@ def _threshold_exprs(thresholds_bp: list[int]) -> list[pl.Expr]:
     return out
 
 
+def stock_filename(cfg: Config) -> str:
+    """Filename for the active stock, keyed by geography.
+
+    A state run and an MSA run produce different tables. Sharing one filename let the
+    second silently overwrite the first, and a later panel build would then join
+    MSA-level exposure onto whatever geography happened to be on disk. The level is in
+    the name so the two cannot be confused.
+    """
+    return f"active_stock_{cfg.panel.geography}.parquet"
+
+
 def build_active_stock(cfg: Config) -> tuple[pl.DataFrame, Path]:
     """Aggregate the episode table into a geography-month active-stock table."""
     geo = "property_state" if cfg.panel.geography == "state" else "msa_code"
@@ -114,10 +125,12 @@ def build_active_stock(cfg: Config) -> tuple[pl.DataFrame, Path]:
         agg = agg.filter(pl.col("geography").is_in(keep))
         cohort_mix = cohort_mix.filter(pl.col("geography").is_in(keep))
 
-    out = cfg.path("processed", "active_stock.parquet")
+    out = cfg.path("processed", stock_filename(cfg))
     out.parent.mkdir(parents=True, exist_ok=True)
     agg.write_parquet(out)
-    cohort_mix.write_parquet(cfg.path("processed", "active_stock_cohort_mix.parquet"))
+    cohort_mix.write_parquet(
+        cfg.path("processed", f"active_stock_cohort_mix_{cfg.panel.geography}.parquet")
+    )
 
     cov = coverage_summary(agg)
     write_manifest(
@@ -198,9 +211,12 @@ def coverage_summary(stock: pl.DataFrame) -> dict[str, object]:
 
 
 def load_active_stock(cfg: Config) -> pl.DataFrame:
-    p = cfg.path("processed", "active_stock.parquet")
+    p = cfg.path("processed", stock_filename(cfg))
     if not p.exists():
-        raise FileNotFoundError(f"{p} missing. Run `make build-local-panel`.")
+        raise FileNotFoundError(
+            f"{p} missing. Run `make build-lockin CONFIG=...` with "
+            f"panel.geography={cfg.panel.geography!r}."
+        )
     return pl.read_parquet(p)
 
 

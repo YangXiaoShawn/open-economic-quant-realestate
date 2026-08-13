@@ -1,0 +1,92 @@
+# Sample run profile.
+#
+# Loan-level inputs: labeled SYNTHETIC fixtures (data/fixtures/freddie).
+# Aggregate inputs:  REAL official public series (PMMS, FHFA HPI, HMDA, Census BPS).
+#
+# Every artifact from this profile is stamped data_class=SYNTHETIC and every report
+# renders the synthetic-data banner. No number produced here is an empirical finding
+# about U.S. mortgages.
+#
+# If you complete the registration in data/DATA_ACCESS.md §R1 and place archives in
+# data/raw/freddie/, switch mortgage.mode to registered_sample or registered_full;
+# the adapters pick the real files up automatically and the banner disappears.
+
+name: msa
+label: "SYNTHETIC loan fixtures + official public aggregate series"
+
+mortgage:
+  mode: synthetic
+  # Three cohorts spanning the pre-pandemic, refinance-boom, and post-boom coupon
+  # regimes, so the pre-shock coupon distribution has real cross-cohort spread.
+  cohorts: ["2019Q2", "2020Q4", "2021Q4"]
+  performance_start: "2021-01"
+  performance_end: "2024-12"
+  fixed_rate_only: true
+  synthetic_loans_per_cohort: 3500
+  synthetic_seed: 20260810
+  chunk_rows: 500000
+
+rates:
+  series: pmms30
+  alternative_series: ["pmms15"]
+  cross_check_fred: true
+
+lockin:
+  thresholds_bp: [100, 200, 300, 400]
+  holding_period_months: 84
+  discount_rate_pct: 4.0
+  refi_incentive_threshold_bp: 50
+
+survival:
+  max_episode_rows: 8000000
+  loan_sample_fraction: 1.0
+  non_event_sample_fraction: 1.0
+  age_bin_edges: [0, 6, 12, 18, 24, 36, 48, 60, 84, 120, 360]
+  out_of_time_split: "2024-01"
+  seed: 20260810
+
+panel:
+  geography: msa
+  states: []            # empty = every state present in the loan data
+  hpi_flavor: purchase-only
+  # FHFA publishes purchase-only MONTHLY only nationally; at State level it is
+  # QUARTERLY. Asking for monthly state purchase-only returns nothing.
+  hpi_frequency: quarterly
+  hpi_seasonal: nsa
+  hmda_years: [2018, 2019, 2020, 2021, 2022, 2023]
+  permits_years: [2018, 2019, 2020, 2021, 2022, 2023]
+  min_loans_per_geography: 25
+
+event_study:
+  pre_shock_date: "2021-12"
+  shock_date: "2022-01"
+  window_pre_periods: 3
+  window_post_periods: 2
+  reference_period_offset: -1
+  exposure_measure: locked_share_upb_200
+  alternative_exposures:
+    - locked_share_count_200
+    - locked_share_upb_100
+    - locked_share_upb_300
+    - mean_payment_gap
+  placebo_shock_dates: ["2018-01", "2019-06"]
+  cluster_by: geography
+  outcomes:
+    - log_purchase_originations
+    - log_refi_originations
+    - hpi_growth
+    - log_permits_1unit
+    - log_permits_5plus
+    - denial_rate
+
+simulation:
+  rate_shocks_bp: [-50, -100, -200]
+  portability_share: 0.5
+  assumability_share: 0.3
+  seller_credit_dollars: 10000.0
+  buydown_bp: 100
+  supply_elasticity_multiplier: 1.5
+  price_elasticity_of_demand: -0.6
+  supply_elasticity: 1.0
+
+offline: false

@@ -74,7 +74,7 @@ def pipeline_status(cfg: Config) -> dict[str, Any]:
 
     for label, fname in (
         ("build-loan-events", "loan_events.parquet"),
-        ("active stock", "active_stock.parquet"),
+        ("active stock", f"active_stock_{cfg.panel.geography}.parquet"),
         ("local panel (monthly)", "local_market_panel_monthly.parquet"),
         ("local panel (annual)", "local_market_panel_annual.parquet"),
     ):
