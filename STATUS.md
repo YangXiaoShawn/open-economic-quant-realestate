@@ -30,7 +30,7 @@ panel → exposure event study → automatically generated research memo.
 |---|---|
 | Pipeline stages | **19 / 19 OK** (`uv run lockin status`) |
 | Result artifacts | **37**, all with evidence tier + population + provenance |
-| Tests | **162 passed**, 1 skipped, 0 failed |
+| Tests | **181 passed**, 1 skipped, 0 failed |
 | `ruff check` | clean |
 | `ruff format --check` | clean |
 | `mypy` | clean (47 source files; core interfaces strict) |
@@ -219,44 +219,50 @@ table whose dense design matrix was 21.7 GB against 17 GB of RAM; and `data/inte
 being shared across run profiles, so a `sample` command silently read `full` data and
 stamped the output `SYNTHETIC`.
 
-## 8. Next milestones, in priority order
+## 8. Where MSA-level analysis landed, and what is left
 
-1. **Registered-data run** (blocked above). Everything downstream is already wired.
-   This is the only step that turns any number in this repository into evidence.
+**MSA-level analysis now runs end to end on registered data: 138 metropolitan CBSAs
+against 51 states.** Every source resolves natively at CBSA level, so the multi-state
+allocation rule once flagged as the blocker is moot.
 
-2. **Finish MSA-level analysis.** The hard part is done: `lockin.adapters.omb_cbsa`
-   builds a six-vintage crosswalk and a per-code stability verdict, the fixtures now
-   carry real composition-stable CBSA codes, `configs/msa.yaml` exists, the active-stock
-   path is geography-keyed, and FHFA HPI resolves at MSA level. **215 metropolitan CBSAs
-   are stable and usable — an 8× gain over 26 state clusters.**
+| outcome | state (51 clus.) | MSA (138 clus.) | MSA pre-trend | tier |
+|---|---|---|---|---|
+| log purchase originations | −0.024 (t −2.18) | **−0.042 (t −4.93)** | **0.036 FAIL** | `descriptive` |
+| log refinance originations | −0.079 (t −2.93) | −0.124 (t −4.68) | **0.000 FAIL** | `descriptive` |
+| log single-family permits | −0.011 (t −0.53) | −0.074 (t −1.61) | 0.636 pass | `quasi_experimental` |
+| log 5+-unit permits *(placebo)* | −0.037 | +0.029 (t +0.37) | 0.940 pass | passes |
+| purchase denial rate *(placebo)* | −0.002 (t −1.57) | −0.001 (t −0.93) | 0.297 pass | passes |
 
-   What remains is three outcome adapters that are still state-only. The panel builder
-   now **refuses** to join them at MSA level rather than silently producing a
-   wrong-geography panel (`GeographyMismatchError`), which is how the first attempt at
-   this failed: it built a plausible-looking 182-row panel with MSA exposure joined onto
-   state outcomes and teleworkable matching 0 of 182 rows, without raising anything.
+**Eight times the clusters bought precision, not identification.** The
+purchase-originations t-statistic more than doubles and the pre-trend still fails, so the
+estimate is still `descriptive`. That the same failure appears at two very different
+levels of aggregation says it is not an artifact of pooling states. Both placebos pass at
+metro level, which is the expected direction and mild evidence the state-level placebo
+failure was a small-cluster artifact.
 
-   | source | MSA support | note |
-   |---|---|---|
-   | FHFA HPI | **done** | resolves at MSA level via config |
-   | HMDA | **done** (`fetch_msa`) | needs per-year delineation resolution + a non-zero guard; reports **divisions**, D036/D037 |
-   | Census BPS | **done** (`fetch_metro`) | two directories split at Jan 2024; reports **parent CBSA**, D038 |
-   | BLS LAUS | remaining | metro series exist (`LAUMT…`); adapter builds state IDs only |
+**What limits the MSA run today**
 
-   Two design questions to settle when doing it: **47 of the 430 metro CBSAs span more than one
-   state**, so any state-published control needs an allocation rule; and Freddie's MSA
-   field is null for ~15% of loans (non-metro), which must be dropped, never imputed —
-   there is no ZIP→CBSA path in the loan file.
+1. **Loan sampling, not geography.** `min_loans_per_geography` counts *sampled* loans, so
+   a nominal 100 at `loan_sample_fraction=0.05` is ~2,000 real loans — which is what
+   takes the panel from 395 resolvable metros to 138. Lifting the sampling lifts the
+   count; the stock manifest records the arithmetic.
+2. **FHFA covers 65 of 138 metros** with a purchase-only quarterly index, so the
+   house-price row rests on half the panel.
+3. **BLS daily request threshold** was reached, so metro LAUS holds only 2021–2022 and
+   the cached-coverage guard reports the labour control UNAVAILABLE rather than serving
+   a short panel. It clears on its own.
+4. **No monthly MSA outcome**, so the monthly specifications skip.
 
-3. **Local market-rate series** from HMDA-reported interest rates (2018+), to reduce the
-   measurement error the national PMMS introduces into the loan-level gap.
+**Still open beyond MSA**
 
-4. **Stable-servicer robustness sample** — still not constructible as intended, because
-   servicer names below 1% of quarterly UPB are collapsed to "Other".
-
-5. **Stock-flow housing model** with search frictions.
-
-6. **County level**, after (2).
+- **Local market-rate series** from HMDA-reported interest rates (2018+), to reduce the
+  measurement error the national PMMS introduces into the loan-level gap.
+- **Stable-servicer robustness sample** — now *possible* where it was not: servicer name
+  moved into the performance file in the shipped layout (D031), so it varies over the
+  life of a loan and a stable-servicer subsample can be constructed. Servicers below 1%
+  of quarterly UPB are still collapsed to "Other".
+- **Stock-flow housing model** with search frictions.
+- **County level**, which needs a ZIP-to-county path the loan file does not provide.
 
 ## 9. Reproducing this
 
