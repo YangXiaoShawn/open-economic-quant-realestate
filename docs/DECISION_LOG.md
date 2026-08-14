@@ -909,3 +909,24 @@ to return `status: "ok"` when the design or outcome contains non-finite values, 
 the fitted coefficient is not finite — a degenerate fit is reported as a failure with a
 reason instead of as a result full of nulls. With both in place the cell estimates
 normally: +0.029, t = +0.37, pre-trend 0.94.
+
+### 2026-08-14 · D044 · Publish the research system, never the registered data **[AUTO]**
+The public release is deliberately split across four surfaces: an independent GitHub
+repository for reviewable source, a permanent GitHub Pages narrative, a versioned
+Hugging Face Dataset prefix, and a Dataset-backed Space. Canonical destinations and
+catalog metadata live in `project.yaml`; the inclusion boundary lives in
+`docs/PUBLICATION.md`.
+
+The package is built from tracked files only. It includes source, tests, configuration,
+synthetic fixtures, documentation, portfolio material, and aggregate reports. It
+excludes `data/raw`, `data/interim`, `data/processed`, `data/cache`, and `outputs` in
+their entirety. This is not only a size decision: the registered Freddie Mac archive and
+every loan-granular derivative are non-redistributable. Aggregate coefficients and
+reports remain publishable because they contain no loan records and retain the required
+population, evidence-tier, and attribution language.
+
+The website headline reports the registered-data hazard association and the failed
+market-level identification checks together. Publishing only the strong loan-level
+association would invite a causal or mobility reading the data do not support; the public
+page therefore gives equal prominence to the pre-trend failures, the null permits result,
+and the rule that prepayment is not a home sale or household move.

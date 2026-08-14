@@ -1,0 +1,47 @@
+title: Mortgage Rate Lock-In and Housing Market Dynamics
+slug: realestate
+summary: Reproducible housing-finance research on how mortgage rate lock-in relates to mortgage exits, local activity, prices, and residential construction.
+research_question: How does the gap between homeowners' existing mortgage rates and current market mortgage rates affect mortgage exits, housing-market activity, local prices, and new construction?
+why_it_matters: Mortgage lock-in may reshape both housing supply and repeat-buyer demand, so credible analysis must separate measurable exposure from causal effects and preserve the distinction between mortgage exits, sales, and moves.
+research_fields:
+  - Housing economics
+  - Mortgage finance
+  - Applied econometrics
+project_type: empirical-research
+status: public-live
+authors:
+  - Repository owner and maintainer
+original_source: RealEstate workspace project
+original_sample_period: Registered Freddie Mac cohorts from 2013Q1 through 2022Q4, with public aggregate outcomes through their documented source periods.
+updated_sample_period: The current public reports cover registered-data analyses completed on 2026-08-13; source-specific periods remain recorded in each artifact.
+data_sources:
+  - Freddie Mac Single-Family Loan-Level Dataset under registration and license; loan-level records are never redistributed
+  - Freddie Mac Primary Mortgage Market Survey
+  - Federal Housing Finance Agency House Price Index
+  - Home Mortgage Disclosure Act aggregations via the CFPB Data Browser
+  - U.S. Census Building Permits Survey and BLS Local Area Unemployment Statistics
+data_license: Registered Freddie Mac records and loan-level derivatives are excluded; public-source and synthetic materials retain source-specific terms documented in data/LICENSE_AND_REDISTRIBUTION.md.
+code_license: MIT
+reproduction_command: make reproduce-sample
+expected_runtime: The synthetic vertical slice is suitable for public reproduction; the registered full run requires licensed data and substantial local compute.
+outputs:
+  - src/
+  - reports/
+  - tests/
+  - dashboard/
+  - data/fixtures/
+  - docs/
+github_url: https://github.com/YangXiaoShawn/open-economic-quant-realestate
+site_url: https://yangxiaoshawn.github.io/projects/realestate/
+dataset_url: https://huggingface.co/datasets/ShawnChamberlain/open-economic-quant-research-data/tree/main/RealEstate
+space_url: https://huggingface.co/spaces/ShawnChamberlain/open-economic-quant-research-observatory
+last_updated: 2026-08-14
+limitations: The loan-level outcome is prepayment, not a home sale or household move. Registered loan-level records and loan-granular derivatives are not redistributed. Loan-level estimates are associations; market-level causal language is allowed only where pre-trends and placebos pass.
+catalog:
+  field: housing
+  accent: amber
+  tags:
+    - Housing Economics
+    - Mortgage Lock-In
+    - Event Studies
+  metric: Tiered empirical evidence

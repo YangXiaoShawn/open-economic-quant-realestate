@@ -169,3 +169,14 @@ dashboard/app.py        Streamlit dashboard
 
 Code: MIT. Data: see `data/LICENSE_AND_REDISTRIBUTION.md` — the data policy is
 stricter than the code licence and overrides it.
+
+## Public release
+
+- Project page: <https://yangxiaoshawn.github.io/projects/realestate/>
+- GitHub source: <https://github.com/YangXiaoShawn/open-economic-quant-realestate>
+- Versioned research package: <https://huggingface.co/datasets/ShawnChamberlain/open-economic-quant-research-data/tree/main/RealEstate>
+- Interactive explorer: <https://huggingface.co/spaces/ShawnChamberlain/open-economic-quant-research-observatory>
+
+The public release contains no registered Freddie Mac loan-level records or
+loan-granular derivatives. See `docs/PUBLICATION.md` for the destination map and
+publication boundary.

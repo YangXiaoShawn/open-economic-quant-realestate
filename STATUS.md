@@ -1,6 +1,6 @@
 # STATUS
 
-**Last updated:** 2026-08-13 (fourth pass) · config `full` — **REGISTERED data**
+**Last updated:** 2026-08-14 (public release pass) · config `full` — **REGISTERED data**
 
 > ✅ **This run uses the REAL Freddie Mac Single-Family Loan-Level Dataset.**
 > 36 of 37 artifacts are stamped `REGISTERED`. The loan-level estimates below are the
@@ -45,6 +45,14 @@ The tier mix moved sharply against the causal reading when real data arrived —
 did not. That is the system working.
 
 Milestones M0–M13 are complete. **M13, the registered-data run, is DONE.**
+
+**Public release is prepared.** The repository now carries canonical project metadata,
+an MIT license file, and a publication map. Its compact public package contains the 101
+publishable project files: source, tests, configuration, documentation, synthetic
+fixtures, and aggregate reports. Registered Freddie Mac records, loan-granular
+derivatives, caches, and generated output artifacts remain excluded by both the release
+process and `.gitignore`. Permanent GitHub, GitHub Pages, Hugging Face Dataset, and Space
+destinations are recorded in `project.yaml` and `docs/PUBLICATION.md`.
 
 ---
 
