@@ -25,6 +25,6 @@ remains authoritative.
 ## Permanent destinations
 
 - Website: <https://yangxiaoshawn.github.io/projects/realestate/>
-- GitHub: <https://github.com/YangXiaoShawn/open-economic-quant-realestate>
+- GitHub: <https://github.com/YangXiaoShawn/YangXiaoShawn.github.io/tree/main/realestate>
 - Dataset: <https://huggingface.co/datasets/ShawnChamberlain/open-economic-quant-research-data/tree/main/RealEstate>
 - Space: <https://huggingface.co/spaces/ShawnChamberlain/open-economic-quant-research-observatory>

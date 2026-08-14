@@ -911,8 +911,8 @@ reason instead of as a result full of nulls. With both in place the cell estimat
 normally: +0.029, t = +0.37, pre-trend 0.94.
 
 ### 2026-08-14 · D044 · Publish the research system, never the registered data **[AUTO]**
-The public release is deliberately split across four surfaces: an independent GitHub
-repository for reviewable source, a permanent GitHub Pages narrative, a versioned
+The public release is deliberately split across four surfaces: a versioned GitHub
+source package for reviewable code, a permanent GitHub Pages narrative, a versioned
 Hugging Face Dataset prefix, and a Dataset-backed Space. Canonical destinations and
 catalog metadata live in `project.yaml`; the inclusion boundary lives in
 `docs/PUBLICATION.md`.
