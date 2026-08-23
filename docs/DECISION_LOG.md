@@ -7,7 +7,7 @@ marked **[AUTO]**.
 ---
 
 ### 2026-08-10 · D001 · Repository initialised from empty directory **[AUTO]**
-`/Users/shawn/Documents/RealEstate` was empty and not a git repository. Initialised
+The dedicated project workspace was empty and not a git repository. Initialised
 a professional research repository with `git init`. No pre-existing user work to
 preserve.
 

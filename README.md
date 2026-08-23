@@ -173,7 +173,7 @@ stricter than the code licence and overrides it.
 ## Public release
 
 - Project page: <https://yangxiaoshawn.github.io/projects/realestate/>
-- GitHub source: <https://github.com/YangXiaoShawn/YangXiaoShawn.github.io/tree/main/realestate>
+- GitHub source: <https://github.com/YangXiaoShawn/open-economic-quant-realestate>
 - Versioned research package: <https://huggingface.co/datasets/ShawnChamberlain/open-economic-quant-research-data/tree/main/RealEstate>
 - Interactive explorer: <https://huggingface.co/spaces/ShawnChamberlain/open-economic-quant-research-observatory>
 
