@@ -30,7 +30,7 @@ panel → exposure event study → automatically generated research memo.
 |---|---|
 | Pipeline stages | **19 / 19 OK** (`uv run lockin status`) |
 | Result artifacts | **37**, all with evidence tier + population + provenance |
-| Tests | **181 passed**, 1 skipped, 0 failed |
+| Tests | **176 passed**, 2 skipped, 0 failed (178 collected; rerun 2026-10-26 on a checkout without cached PMMS data) |
 | `ruff check` | clean |
 | `ruff format --check` | clean |
 | `mypy` | clean (47 source files; core interfaces strict) |
